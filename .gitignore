@@ -27,12 +27,13 @@ htmlcov/
 .ipynb_checkpoints/
 
 # --- Data layer (raw cache + curated tables + DuckDB) ---
-data/
+# leading slash = only the repo-root data/ cache, NOT src/wetter/data or tests/data
+/data/
 *.duckdb
 *.duckdb.wal
 
 # --- Generated evaluation artifacts ---
-reports/
+/reports/
 *.png
 *.html
 
