@@ -27,8 +27,14 @@ htmlcov/
 .ipynb_checkpoints/
 
 # --- Data layer (raw cache + curated tables + DuckDB) ---
-# leading slash = only the repo-root data/ cache, NOT src/wetter/data or tests/data
-/data/
+# Ignore the repo-root data/ cache (NOT src/wetter/data or tests/data), but SHIP the
+# small trained model artifacts so a fresh clone can serve immediately. git can't
+# un-ignore a file whose parent dir is fully excluded, so ignore the *contents*
+# (/data/*) and re-include the models dir + the .joblib files.
+/data/*
+!/data/models/
+/data/models/*
+!/data/models/*.joblib
 *.duckdb
 *.duckdb.wal
 
