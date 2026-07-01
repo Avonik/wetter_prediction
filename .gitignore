@@ -34,8 +34,13 @@ htmlcov/
 
 # --- Generated evaluation artifacts ---
 /reports/
+# report figures live under /reports/; keep *.png broad to also drop stray screenshots,
+# but do NOT ignore *.html — that would swallow the website's src/wetter/web/static/index.html
 *.png
-*.html
+
+# --- Browser screenshots / Playwright scratch ---
+.playwright-mcp/
+/luneburg-weather*.png
 
 # --- Secrets / local config ---
 .env

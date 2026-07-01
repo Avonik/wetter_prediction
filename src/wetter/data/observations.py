@@ -15,11 +15,13 @@ def parse_weather(payload: dict) -> pl.DataFrame:
         {
             "valid_time": [r["timestamp"] for r in rows],
             "t_obs": [r.get("temperature") for r in rows],
+            "p_obs": [r.get("precipitation") for r in rows],  # mm/h, rain target
         }
     )
     return df.with_columns(
         pl.col("valid_time").str.to_datetime(time_zone="UTC"),
         pl.col("t_obs").cast(pl.Float64),
+        pl.col("p_obs").cast(pl.Float64),
     )
 
 
@@ -32,7 +34,7 @@ def fetch_observations(
     force: bool = False,
 ) -> pl.DataFrame:
     base = cache_dir if cache_dir is not None else config.RAW_DIR / "obs"
-    frames = []
+    items = []
     for lo, hi in io.month_chunks(start, end):
         path = base / f"brightsky_{station_id}_{lo[:7]}.parquet"
 
@@ -43,5 +45,6 @@ def fetch_observations(
             )
             return parse_weather(payload)
 
-        frames.append(io.cached_parquet(path, builder, force=force))
+        items.append((path, builder))
+    frames = io.cached_parquet_many(items, force=force)
     return pl.concat(frames).unique(subset="valid_time", keep="last").sort("valid_time")

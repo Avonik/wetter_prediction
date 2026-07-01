@@ -19,6 +19,7 @@ VARS: list[tuple[str, str]] = [
     ("wind", "wind_speed_10m"),
     ("pmsl", "pressure_msl"),
     ("rad", "shortwave_radiation"),
+    ("precip", "precipitation"),  # mm/h — for the rain model
 ]
 
 _HOURLY_VARS = ",".join(

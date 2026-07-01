@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lüneburg Wetter · lokal getunt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="pin">📍</span>
+        <div>
+          <h1>Lüneburg</h1>
+          <p id="station" class="muted">—</p>
+        </div>
+      </div>
+      <div class="topright">
+        <span class="badge">🎯 lokal feingetunt</span>
+        <span id="updated" class="muted small">—</span>
+      </div>
+    </header>
+
+    <main id="content" hidden>
+      <!-- current weather hero -->
+      <section id="hero" class="hero">
+        <div class="hero-main">
+          <div id="hero-icon" class="hero-icon">🌡️</div>
+          <div>
+            <div id="hero-temp" class="hero-temp">–</div>
+            <div id="hero-cond" class="hero-cond muted">—</div>
+          </div>
+        </div>
+        <div class="hero-chips">
+          <div class="chip"><span class="chip-k">Wind</span><span id="c-wind" class="chip-v">–</span></div>
+          <div class="chip"><span class="chip-k">Feuchte</span><span id="c-hum" class="chip-v">–</span></div>
+          <div class="chip"><span class="chip-k">Bewölkung</span><span id="c-cloud" class="chip-v">–</span></div>
+        </div>
+      </section>
+
+      <!-- hourly strip: our model at a glance -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Nächste Stunden</h2>
+          <p class="muted small">Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.</p>
+        </div>
+        <div id="hourstrip" class="hourstrip"></div>
+      </section>
+
+      <!-- hourly chart -->
+      <section class="card">
+        <div class="card-head">
+          <h2>48-Stunden-Verlauf &amp; Modellvergleich</h2>
+          <p class="muted small"><b style="color:#ffd166">Unser Modell</b> (dicke Linie + 80 %-Band) gegen die großen Wettermodelle (gestrichelt).</p>
+        </div>
+        <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
+      </section>
+
+      <!-- 7 day strip -->
+      <section class="card">
+        <div class="card-head">
+          <h2>7-Tage-Vorhersage</h2>
+          <p class="muted small">Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).</p>
+        </div>
+        <div id="daily" class="daily"></div>
+      </section>
+
+      <section class="note">
+        <strong>Warum lokal besser?</strong> Diese Engine nimmt die großen Profimodelle
+        (ICON-D2, ECMWF, GFS …), korrigiert ihre lokalen Fehler für die Station Wendisch Evern
+        und fusioniert die aktuelle Messung. Im Backtest schlägt sie das beste Rohmodell vor
+        allem in den ersten Stunden (~+29 % bei +1 h).
+      </section>
+    </main>
+
+    <div id="loading" class="state"><div class="spinner"></div><p>Lade aktuelle Vorhersage…</p></div>
+    <div id="error" class="state" hidden></div>
+
+    <footer class="foot muted small">
+      Wetterdaten: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0) ·
+      Stationsdaten: <a href="https://brightsky.dev">Bright Sky</a> / DWD ·
+      kein offizielles Wetterprodukt.
+    </footer>
+  </div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

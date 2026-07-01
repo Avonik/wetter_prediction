@@ -71,14 +71,15 @@ def fetch_runs(
     *,
     models: list[str] = config.MODELS,
     run_hours: tuple[int, ...] = (0,),
-    max_lead_h: int = 48,
+    max_lead_h: int | None = None,
     cache_dir: Path | None = None,
     force: bool = False,
 ) -> pl.DataFrame:
     """Sample issued runs (one per `run_hours` per day) per model, cached per run.
     Missing runs (HTTP 400) are cached as empty so re-runs skip them."""
+    max_lead_h = max_lead_h or config.HOURLY_MAX_LEAD_H
     root = cache_dir if cache_dir is not None else config.RAW_DIR / "single_runs"
-    frames = []
+    items: list = []
     d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
     for model in models:
         d = d0
@@ -100,13 +101,15 @@ def fetch_runs(
                                 "timezone": "GMT",
                             },
                         )
-                    except httpx.HTTPStatusError:
+                    except (httpx.HTTPError, ValueError):
+                        # missing run (400), exhausted retries, or bad body -> skip
                         return _empty()
                     df = parse_run(payload, model, run_iso)
                     return df.filter(
                         (pl.col("lead_time_h") >= 1) & (pl.col("lead_time_h") <= max_lead_h)
                     )
 
-                frames.append(io.cached_parquet(path, builder, force=force))
+                items.append((path, builder))
             d = d + timedelta(days=1)
+    frames = io.cached_parquet_many(items, force=force)
     return pl.concat(frames) if frames else _empty()

@@ -14,7 +14,7 @@ FORECAST_START = "2024-01-01"
 
 # Single Runs API (honest hourly-lead forecast history) — ICON-D2 coverage starts ~Sep 2025.
 SINGLE_RUNS_START = "2025-09-01"
-HOURLY_MAX_LEAD_H = 48
+HOURLY_MAX_LEAD_H = 168  # full 7 days (ICON-D2 ~48h, ECMWF reaches 168h)
 
 _ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = _ROOT / "data"

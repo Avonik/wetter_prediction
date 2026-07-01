@@ -85,6 +85,7 @@ def build_hourly(
     end: str | None = None,
     run_hours: tuple[int, ...] = (0,),
     max_lead_h: int | None = None,
+    force: bool = False,
 ) -> Path:
     """Build the hourly-lead canonical table from Single Runs forecasts. Reuses
     build_canonical: a single-run row carries the same (valid_time, lead_time_h,
@@ -95,7 +96,9 @@ def build_hourly(
     max_lead_h = max_lead_h or config.HOURLY_MAX_LEAD_H
 
     obs = observations.fetch_observations(config.FORECAST_START, today)
-    runs = single_runs.fetch_runs(start, end, run_hours=run_hours, max_lead_h=max_lead_h)
+    runs = single_runs.fetch_runs(
+        start, end, run_hours=run_hours, max_lead_h=max_lead_h, force=force
+    )
     clim = climatology.compute_climatology(climatology.fetch_era5(config.OBS_START, today))
     canon = build_canonical(obs, runs.drop("run_time"), clim)
 

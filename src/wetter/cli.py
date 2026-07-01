@@ -13,9 +13,11 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 from wetter import config
-from wetter.data import build_dataset, climatology, forecasts, live, observations, single_runs
+from wetter.data import (
+    build_dataset, climatology, forecasts, live, observations, rain_dataset, single_runs,
+)
 from wetter.eval import report
-from wetter.models import engine
+from wetter.models import engine, rain
 
 app = typer.Typer(help="Lüneburg temperature postprocessing engine")
 
@@ -55,9 +57,26 @@ def pull_runs(start: str = config.SINGLE_RUNS_START, end: str = "", force: bool 
 
 
 @app.command("build-hourly")
-def build_hourly_cmd() -> None:
-    path = build_dataset.build_hourly()
+def build_hourly_cmd(force: bool = False) -> None:
+    path = build_dataset.build_hourly(force=force)
     typer.echo(f"wrote {path}")
+
+
+@app.command("build-rain")
+def build_rain_cmd(force_obs: bool = False) -> None:
+    path = rain_dataset.build_rain(force_obs=force_obs)
+    typer.echo(f"wrote {path}")
+
+
+@app.command("train-rain")
+def train_rain_cmd() -> None:
+    import polars as pl
+
+    canon = pl.read_parquet(config.CURATED_DIR / "canonical_rain.parquet")
+    art = rain.train_rain_engine(canon)
+    path = rain.save_rain_engine(art)
+    typer.echo(f"trained rain engine -> {path}")
+    typer.echo(f"thresholds {art['thresholds']} | base rate {art['base_rate']:.3f}")
 
 
 @app.command("train-hourly")
@@ -69,6 +88,15 @@ def train_hourly(tune_end: str = "2026-04-01", cal_window_days: int = 30) -> Non
     path = engine.save_engine(art, engine.HOURLY_ENGINE_PATH)
     typer.echo(f"trained hourly engine -> {path}")
     typer.echo(f"leads {art['leads'][0]}..{art['leads'][-1]}h  params: {art['params']}")
+
+
+@app.command("serve")
+def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Run the Lüneburg weather website."""
+    import uvicorn
+
+    typer.echo(f"Lüneburg weather → http://{host}:{port}")
+    uvicorn.run("wetter.web.app:app", host=host, port=port, log_level="warning")
 
 
 @app.command("forecast")
