@@ -21,7 +21,6 @@
         </div>
       </div>
       <div class="topright">
-        <span class="badge">🎯 lokal feingetunt</span>
         <span id="updated" class="muted small">—</span>
       </div>
     </header>
@@ -42,6 +41,9 @@
           <div class="chip"><span class="chip-k">Bewölkung</span><span id="c-cloud" class="chip-v">–</span></div>
         </div>
       </section>
+
+      <!-- weather warnings (DWD) — only shown when active -->
+      <section id="warnings" class="warnings" hidden></section>
 
       <!-- hourly strip: our model at a glance -->
       <section class="card">
@@ -71,10 +73,12 @@
       </section>
 
       <section class="note">
-        <strong>Warum lokal besser?</strong> Diese Engine nimmt die großen Profimodelle
-        (ICON-D2, ECMWF, GFS …), korrigiert ihre lokalen Fehler für die Station Wendisch Evern
-        und fusioniert die aktuelle Messung. Im Backtest schlägt sie das beste Rohmodell vor
-        allem in den ersten Stunden (~+29 % bei +1 h).
+        <strong>Wie diese Vorhersage entsteht.</strong> Sie kombiniert mehrere Profi-Wettermodelle
+        (ICON-D2, ICON-EU, ECMWF, GFS), korrigiert deren lokale Fehler für die Station Wendisch Evern
+        und bezieht die aktuelle Messung mit ein. Ergebnis: Temperatur mit Unsicherheitsband und
+        eine <em>kalibrierte</em> Regenwahrscheinlichkeit — sagt sie 30 %, regnet es über viele Tage
+        auch etwa in 30 % der Fälle. Die Genauigkeit ist gegen die tatsächlich gemessenen Werte
+        geprüft (Backtest). Kein offizielles Wetterprodukt.
       </section>
     </main>
 

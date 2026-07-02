@@ -38,9 +38,36 @@ function render(d) {
   document.getElementById("c-cloud").textContent = c.cloud_cover != null ? Math.round(c.cloud_cover) + " %" : "–";
   tintHero(c.temperature);
 
+  renderWarnings(d.alerts);
   renderHourStrip(d.hourly);
   renderChart(d);
   renderDaily(d.daily);
+}
+
+function renderWarnings(alerts) {
+  const el = document.getElementById("warnings");
+  if (!alerts || !alerts.length) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+  el.hidden = false;
+  el.innerHTML = alerts
+    .map((a) => {
+      const sev = (a.severity || "").toLowerCase();
+      const until = a.expires
+        ? " · bis " +
+          new Date(a.expires).toLocaleString("de-DE", {
+            weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin",
+          })
+        : "";
+      return (
+        `<div class="warn warn-${sev}"><span class="warn-ic">⚠️</span>` +
+        `<div><div class="warn-h">${a.headline}</div>` +
+        `<div class="warn-m">${a.event || ""}${until}</div></div></div>`
+      );
+    })
+    .join("");
 }
 
 function renderHourStrip(hourly) {

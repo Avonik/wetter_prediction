@@ -14,8 +14,40 @@ def test_fetch_current_parses(monkeypatch):
     monkeypatch.setattr(service.io, "get_json", lambda url, params: payload)
     cur = service.fetch_current()
     assert cur["temperature"] == 18.4
-    assert cur["icon"] == "☀️"  # clear-day -> sun
+    assert cur["icon_raw"] == "clear-day"  # emoji is derived later in assemble()
     assert cur["humidity"] == 55
+
+
+def test_weather_emoji_specificity():
+    assert service._weather_emoji("dry", "clear-day", 5, 0) == "☀️"
+    assert service._weather_emoji("dry", "clear-day", 30, 0) == "🌥️"
+    assert service._weather_emoji("dry", "partly-cloudy-day", 65, 0) == "⛅"
+    assert service._weather_emoji("dry", "cloudy", 95, 0) == "☁️"
+    assert service._weather_emoji("rain", "rain", 70, 0.3) == "🌦️"  # showers, some breaks
+    assert service._weather_emoji("rain", "rain", 95, 1.0) == "🌧️"  # steady, overcast
+    assert service._weather_emoji("dry", "clear-night", 5, 0) == "🌙"
+    assert service._weather_emoji("thunderstorm", "thunderstorm", 90, 2) == "⛈️"
+
+
+def test_fetch_alerts_parses(monkeypatch):
+    payload = {"alerts": [{
+        "headline_de": "Amtliche Warnung vor Windböen", "event_de": "WINDBÖEN",
+        "severity": "Moderate", "onset": "2026-07-02T10:00+00:00",
+        "expires": "2026-07-02T16:00+00:00", "instruction_de": "Vorsicht",
+    }]}
+    monkeypatch.setattr(service.io, "get_json", lambda url, params: payload)
+    alerts = service.fetch_alerts()
+    assert len(alerts) == 1
+    assert alerts[0]["headline"] == "Amtliche Warnung vor Windböen"
+    assert alerts[0]["severity"] == "moderate"  # lowercased
+
+
+def test_fetch_alerts_tolerates_failure(monkeypatch):
+    def boom(url, params):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(service.io, "get_json", boom)
+    assert service.fetch_alerts() == []  # never breaks the page
 
 
 def test_models_hourly_window_and_labels():

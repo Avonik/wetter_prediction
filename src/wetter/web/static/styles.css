@@ -110,6 +110,22 @@ a:hover { text-decoration: underline; }
   border-radius: 16px; padding: 16px 18px; font-size: 0.92rem; line-height: 1.5; color: #dce6fb;
 }
 .note strong { color: #fff; }
+.note em { color: #fff; font-style: normal; font-weight: 600; }
+
+/* weather warnings (DWD) */
+.warnings { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+.warn {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px;
+  background: rgba(232, 145, 58, 0.15); border: 1px solid rgba(232, 145, 58, 0.5);
+  box-shadow: var(--shadow);
+}
+.warn-ic { font-size: 1.4rem; line-height: 1.2; }
+.warn-h { font-weight: 700; color: #fff; }
+.warn-m { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.warn-minor { background: rgba(230, 195, 77, 0.13); border-color: rgba(230, 195, 77, 0.45); }
+.warn-severe, .warn-extreme {
+  background: rgba(217, 83, 79, 0.17); border-color: rgba(217, 83, 79, 0.55);
+}
 .foot { margin-top: 26px; text-align: center; line-height: 1.6; }
 
 .state { text-align: center; padding: 60px 20px; color: var(--muted); }

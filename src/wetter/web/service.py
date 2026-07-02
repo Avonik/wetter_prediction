@@ -13,13 +13,34 @@ from wetter.models import rain as rain_model
 _TTL_S = 600  # serve a cached bundle for 10 min to avoid hammering the upstream APIs
 _CACHE: dict = {"ts": -1e18, "data": None}
 
-# Bright Sky condition/icon -> emoji for the UI
-_ICON = {
-    "clear-day": "☀️", "clear-night": "🌙", "partly-cloudy-day": "⛅",
-    "partly-cloudy-night": "☁️", "cloudy": "☁️", "fog": "🌫️", "wind": "💨",
-    "rain": "🌧️", "sleet": "🌨️", "snow": "❄️", "hail": "🌨️",
-    "thunderstorm": "⛈️", "dry": "☀️", "null": "🌡️",
-}
+_ALERTS_URL = "https://api.brightsky.dev/alerts"
+
+
+def _weather_emoji(condition, icon_raw, cloud_cover, precip) -> str:
+    """Granular sky symbol from condition + cloud cover + precipitation."""
+    is_night = "night" in (icon_raw or "")
+    cond = (condition or "").lower()
+    if cond == "thunderstorm":
+        return "⛈️"
+    if cond == "snow":
+        return "❄️"
+    if cond in ("sleet", "hail"):
+        return "🌨️"
+    if cond == "fog":
+        return "🌫️"
+    if cond == "rain" or (precip or 0) > 0.05:
+        # showers (some breaks) vs steady rain (fully overcast)
+        return "🌧️" if (cloud_cover if cloud_cover is not None else 100) >= 85 else "🌦️"
+    cc = cloud_cover if cloud_cover is not None else 0
+    if is_night:
+        return "🌙" if cc < 40 else "☁️"
+    if cc < 15:
+        return "☀️"      # klar
+    if cc < 50:
+        return "🌥️"      # sonnig, wenig Wolken
+    if cc < 85:
+        return "⛅"       # heiter bis wolkig
+    return "☁️"          # bedeckt
 
 # pretty labels for the raw model lines
 MODEL_LABELS = {
@@ -39,12 +60,33 @@ def fetch_current() -> dict:
         "time": t.isoformat(),
         "temperature": w.get("temperature"),
         "condition": w.get("condition"),
-        "icon": _ICON.get(str(w.get("icon")), "🌡️"),
+        "icon_raw": w.get("icon"),  # Bright Sky icon string (day/night hint); emoji set in assemble
         "wind_speed": w.get("wind_speed"),
         "humidity": w.get("relative_humidity"),
         "cloud_cover": w.get("cloud_cover"),
         "precip": w.get("precipitation"),  # mm/h now (is it raining?)
     }
+
+
+def fetch_alerts() -> list[dict]:
+    """Active DWD weather warnings for Lüneburg (via Bright Sky /alerts)."""
+    try:
+        payload = io.get_json(_ALERTS_URL, {"lat": config.LAT, "lon": config.LON, "tz": "UTC"})
+    except Exception:  # noqa: BLE001  (warnings are optional; never break the page)
+        return []
+    out = []
+    for a in payload.get("alerts", []) or []:
+        out.append(
+            {
+                "headline": a.get("headline_de") or a.get("event_de") or "Wetterwarnung",
+                "event": a.get("event_de"),
+                "severity": (a.get("severity") or "").lower(),
+                "onset": a.get("onset"),
+                "expires": a.get("expires"),
+                "instruction": a.get("instruction_de"),
+            }
+        )
+    return out
 
 
 def _rain_category(p: float | None, p1: float | None) -> str:
@@ -157,6 +199,10 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
         current["cloud_cover"] = _now_var("cloud")
     if current.get("humidity") is None:
         current["humidity"] = _now_var("rh")
+    current["icon"] = _weather_emoji(
+        current.get("condition"), current.get("icon_raw"),
+        current.get("cloud_cover"), current.get("precip"),
+    )
 
     # tolerate engines trained before the "leads" field existed
     all_leads = [lead for lead in (hourly_art.get("leads") or range(1, 169)) if 1 <= lead <= 168]
@@ -189,5 +235,6 @@ def bundle(*, force: bool = False) -> dict:
         return _CACHE["data"]
     hourly_art = engine.load_engine(engine.HOURLY_ENGINE_PATH)
     data = assemble(fetch_current(), live.fetch_live_forecast(), hourly_art)
+    data["alerts"] = fetch_alerts()
     _CACHE.update(ts=time.monotonic(), data=data)
     return data
