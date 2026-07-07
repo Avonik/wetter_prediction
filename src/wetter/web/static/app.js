@@ -1,4 +1,166 @@
+const LANGUAGE_KEY = "wetter.language";
+
+const I18N = {
+  de: {
+    htmlLang: "de",
+    locale: "de-DE",
+    title: "Lüneburg Wetter · lokal getunt",
+    languageLabel: "Sprache",
+    switchAria: "Auf englisches Layout umschalten",
+    humidity: "Feuchte",
+    cloudCover: "Bewölkung",
+    hoursTitle: "Nächste Stunden",
+    hoursSubtitle: "Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.",
+    chartTitle: "48-Stunden-Verlauf & Modellvergleich",
+    chartSubtitle:
+      '<b style="color:#ffd166">Unser Modell</b> (dicke Linie + 80 %-Band) gegen die großen Wettermodelle (gestrichelt).',
+    dailyTitle: "7-Tage-Vorhersage",
+    dailySubtitle: "Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).",
+    note:
+      "<strong>Wie diese Vorhersage entsteht.</strong> Sie kombiniert mehrere Profi-Wettermodelle " +
+      "(ICON-D2, ICON-EU, ECMWF, GFS), korrigiert deren lokale Fehler für die Station Wendisch Evern " +
+      "und bezieht die aktuelle Messung mit ein. Ergebnis: Temperatur mit Unsicherheitsband und " +
+      "eine <em>kalibrierte</em> Regenwahrscheinlichkeit — sagt sie 30 %, regnet es über viele Tage " +
+      "auch etwa in 30 % der Fälle. Die Genauigkeit ist gegen die tatsächlich gemessenen Werte " +
+      "geprüft (Backtest). Kein offizielles Wetterprodukt.",
+    loading: "Lade aktuelle Vorhersage…",
+    footerData:
+      'Wetterdaten: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0) · ' +
+      'Stationsdaten: <a href="https://brightsky.dev">Bright Sky</a> / DWD · ' +
+      "kein offizielles Wetterprodukt.",
+    supportProject: "Projekt unterstützen",
+    updatedPrefix: "Stand:",
+    currentFallback: "aktuell",
+    until: "bis",
+    errorTitle: "⚠️ Vorhersage konnte nicht geladen werden.",
+    bandLabel: "80 %-Band",
+    ourModelLabel: "Unser Modell",
+    conditions: {
+      clear: "klar",
+      cloudy: "bewölkt",
+      dry: "trocken",
+      fog: "Nebel",
+      hail: "Hagel",
+      rain: "Regen",
+      sleet: "Schneeregen",
+      snow: "Schnee",
+      thunderstorm: "Gewitter",
+      trocken: "trocken",
+    },
+  },
+  en: {
+    htmlLang: "en",
+    locale: "en-GB",
+    title: "Lüneburg Weather · locally tuned",
+    languageLabel: "Language",
+    switchAria: "Switch to German layout",
+    humidity: "Humidity",
+    cloudCover: "Clouds",
+    hoursTitle: "Next Hours",
+    hoursSubtitle: "Temperature + calibrated rain probability, hour by hour.",
+    chartTitle: "48-Hour Trend & Model Comparison",
+    chartSubtitle:
+      '<b style="color:#ffd166">Our model</b> (thick line + 80% band) against the major weather models (dashed).',
+    dailyTitle: "7-Day Forecast",
+    dailySubtitle: "Daily highs and lows · our locally tuned model (German time).",
+    note:
+      "<strong>How this forecast is made.</strong> It combines several professional weather models " +
+      "(ICON-D2, ICON-EU, ECMWF, GFS), corrects their local bias for the Wendisch Evern station, " +
+      "and includes the latest observation. The result: temperature with an uncertainty band and " +
+      "a <em>calibrated</em> rain probability — when it says 30%, rain occurs on roughly 30% of similar days. " +
+      "Accuracy is checked against the values actually measured in a backtest. Not an official weather product.",
+    loading: "Loading current forecast…",
+    footerData:
+      'Weather data: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0) · ' +
+      'Station data: <a href="https://brightsky.dev">Bright Sky</a> / DWD · ' +
+      "not an official weather product.",
+    supportProject: "Support the project",
+    updatedPrefix: "Updated:",
+    currentFallback: "current",
+    until: "until",
+    errorTitle: "⚠️ Forecast could not be loaded.",
+    bandLabel: "80% band",
+    ourModelLabel: "Our model",
+    conditions: {
+      clear: "clear",
+      cloudy: "cloudy",
+      dry: "dry",
+      fog: "fog",
+      hail: "hail",
+      rain: "rain",
+      sleet: "sleet",
+      snow: "snow",
+      thunderstorm: "thunderstorm",
+      trocken: "dry",
+      "leichter regen": "light rain",
+      "evtl. schauer": "possible showers",
+    },
+  },
+};
+
+const DOW_EN = { Mo: "Mon", Di: "Tue", Mi: "Wed", Do: "Thu", Fr: "Fri", Sa: "Sat", So: "Sun" };
+
+const state = {
+  lang: readLanguage(),
+  forecast: null,
+  error: "",
+};
+
 const fmtTemp = (v) => (v == null ? "–" : Math.round(v) + "°");
+const $ = (id) => document.getElementById(id);
+const tr = () => I18N[state.lang];
+const locale = () => tr().locale;
+
+function readLanguage() {
+  try {
+    return localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "de";
+  } catch {
+    return "de";
+  }
+}
+
+function saveLanguage() {
+  try {
+    localStorage.setItem(LANGUAGE_KEY, state.lang);
+  } catch {
+    // A blocked localStorage should not block the layout switch.
+  }
+}
+
+function applyTranslations() {
+  document.documentElement.lang = tr().htmlLang;
+  document.title = tr().title;
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = tr()[el.dataset.i18n];
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    el.innerHTML = tr()[el.dataset.i18nHtml];
+  });
+
+  const toggle = $("langToggle");
+  if (toggle) {
+    toggle.checked = state.lang === "en";
+    toggle.setAttribute("aria-label", tr().switchAria);
+  }
+}
+
+function setLanguage(lang) {
+  if (!I18N[lang] || lang === state.lang) return;
+  state.lang = lang;
+  saveLanguage();
+  applyTranslations();
+
+  if (state.forecast) render(state.forecast);
+  if (state.error) renderError();
+}
+
+function initLanguageToggle() {
+  const toggle = $("langToggle");
+  if (!toggle) return;
+  applyTranslations();
+  toggle.addEventListener("change", () => setLanguage(toggle.checked ? "en" : "de"));
+}
 
 async function load() {
   try {
@@ -12,30 +174,45 @@ async function load() {
 }
 
 function showError(msg) {
-  document.getElementById("loading").hidden = true;
-  const el = document.getElementById("error");
+  $("loading").hidden = true;
+  state.error = msg;
+  renderError();
+}
+
+function renderError() {
+  const el = $("error");
   el.hidden = false;
-  el.innerHTML = `<p>⚠️ Vorhersage konnte nicht geladen werden.</p><p class="small">${msg}</p>`;
+  el.innerHTML = `<p>${tr().errorTitle}</p><p class="small">${state.error}</p>`;
 }
 
 function render(d) {
-  document.getElementById("loading").hidden = true;
-  document.getElementById("content").hidden = false;
-  document.getElementById("station").textContent = d.station;
+  state.forecast = d;
+  state.error = "";
+  $("loading").hidden = true;
+  $("error").hidden = true;
+  $("content").hidden = false;
+  $("station").textContent = d.station;
+
   const gen = new Date(d.generated_at);
-  document.getElementById("updated").textContent =
-    "Stand: " + gen.toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+  $("updated").textContent =
+    `${tr().updatedPrefix} ` +
+    gen.toLocaleString(locale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "Europe/Berlin",
+    });
 
   const c = d.current;
-  document.getElementById("hero-icon").textContent = c.icon || "🌡️";
-  document.getElementById("hero-temp").textContent = fmtTemp(c.temperature);
-  const cond = c.condition || "aktuell";
+  $("hero-icon").textContent = c.icon || "🌡️";
+  $("hero-temp").textContent = fmtTemp(c.temperature);
+  const cond = formatCondition(c.condition);
   const raining = c.precip != null && c.precip > 0.05;
-  document.getElementById("hero-cond").textContent = raining
-    ? `${cond} · 🌧️ ${c.precip} mm/h` : cond;
-  document.getElementById("c-wind").textContent = c.wind_speed != null ? Math.round(c.wind_speed) + " km/h" : "–";
-  document.getElementById("c-hum").textContent = c.humidity != null ? Math.round(c.humidity) + " %" : "–";
-  document.getElementById("c-cloud").textContent = c.cloud_cover != null ? Math.round(c.cloud_cover) + " %" : "–";
+  $("hero-cond").textContent = raining ? `${cond} · 🌧️ ${c.precip} mm/h` : cond;
+  $("c-wind").textContent = c.wind_speed != null ? Math.round(c.wind_speed) + " km/h" : "–";
+  $("c-hum").textContent = c.humidity != null ? Math.round(c.humidity) + " %" : "–";
+  $("c-cloud").textContent = c.cloud_cover != null ? Math.round(c.cloud_cover) + " %" : "–";
   tintHero(c.temperature);
 
   renderWarnings(d.alerts);
@@ -44,8 +221,14 @@ function render(d) {
   renderDaily(d.daily);
 }
 
+function formatCondition(condition) {
+  if (!condition) return tr().currentFallback;
+  const key = String(condition).trim().toLowerCase();
+  return tr().conditions[key] || condition;
+}
+
 function renderWarnings(alerts) {
-  const el = document.getElementById("warnings");
+  const el = $("warnings");
   if (!alerts || !alerts.length) {
     el.hidden = true;
     el.innerHTML = "";
@@ -56,9 +239,14 @@ function renderWarnings(alerts) {
     .map((a) => {
       const sev = (a.severity || "").toLowerCase();
       const until = a.expires
-        ? " · bis " +
-          new Date(a.expires).toLocaleString("de-DE", {
-            weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin",
+        ? " · " +
+          tr().until +
+          " " +
+          new Date(a.expires).toLocaleString(locale(), {
+            weekday: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Europe/Berlin",
           })
         : "";
       return (
@@ -71,11 +259,13 @@ function renderWarnings(alerts) {
 }
 
 function renderHourStrip(hourly) {
-  const el = document.getElementById("hourstrip");
+  const el = $("hourstrip");
   el.innerHTML = "";
   for (const h of hourly.slice(0, 12)) {
-    const hr = new Date(h.t).toLocaleTimeString("de-DE", {
-      hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin",
+    const hr = new Date(h.t).toLocaleTimeString(locale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Berlin",
     });
     const card = document.createElement("div");
     card.className = "hourcard";
@@ -92,7 +282,7 @@ function renderHourStrip(hourly) {
 function tintHero(t) {
   if (t == null) return;
   const hue = Math.max(0, Math.min(210, 210 - (t + 5) * 7)); // cold→blue, warm→orange
-  document.getElementById("hero").style.background =
+  $("hero").style.background =
     `linear-gradient(135deg, hsla(${hue},70%,55%,0.32), rgba(255,255,255,0.06))`;
 }
 
@@ -100,7 +290,7 @@ const COLORS = ["#6db3ff", "#9b8cff", "#5fd0c0", "#ff9f7a", "#d98cff"];
 
 function renderChart(d) {
   const labels = d.hourly.map((h) =>
-    new Date(h.t).toLocaleTimeString("de-DE", { hour: "2-digit" })
+    new Date(h.t).toLocaleTimeString(locale(), { hour: "2-digit", timeZone: "Europe/Berlin" })
   );
   const lo = d.hourly.map((h) => h.lo);
   const hi = d.hourly.map((h) => h.hi);
@@ -109,11 +299,11 @@ function renderChart(d) {
   const ds = [
     { label: "_lo", data: lo, borderColor: "transparent", pointRadius: 0, fill: false },
     {
-      label: "80 %-Band", data: hi, borderColor: "transparent",
+      label: tr().bandLabel, data: hi, borderColor: "transparent",
       backgroundColor: "rgba(255,209,102,0.18)", pointRadius: 0, fill: "-1",
     },
     {
-      label: "Unser Modell", data: pt, borderColor: "#ffd166", borderWidth: 3,
+      label: tr().ourModelLabel, data: pt, borderColor: "#ffd166", borderWidth: 3,
       pointRadius: 0, tension: 0.35, fill: false,
     },
   ];
@@ -130,7 +320,7 @@ function renderChart(d) {
   }
 
   if (window._chart) window._chart.destroy();
-  window._chart = new Chart(document.getElementById("hourlyChart"), {
+  window._chart = new Chart($("hourlyChart"), {
     type: "line",
     data: { labels, datasets: ds },
     options: {
@@ -154,14 +344,14 @@ function renderChart(d) {
 }
 
 function renderDaily(daily) {
-  const el = document.getElementById("daily");
+  const el = $("daily");
   el.innerHTML = "";
   for (const day of daily) {
     const card = document.createElement("div");
     card.className = "day";
     const rain = day.rain_p != null ? "💧 " + Math.round(day.rain_p * 100) + "%" : "";
     card.innerHTML =
-      `<div class="dow">${day.dow}</div><div class="date">${day.date}</div>` +
+      `<div class="dow">${formatDayName(day)}</div><div class="date">${formatDayDate(day)}</div>` +
       `<div class="hi">${day.tmax}°</div>` +
       `<div class="lo">↓ ${day.tmin}°</div>` +
       `<div class="drain">${rain}</div>` +
@@ -170,4 +360,28 @@ function renderDaily(daily) {
   }
 }
 
+function formatDayName(day) {
+  if (day.date_iso) {
+    return dateFromIsoDay(day.date_iso).toLocaleDateString(locale(), {
+      weekday: "short",
+      timeZone: "Europe/Berlin",
+    });
+  }
+  return state.lang === "en" ? DOW_EN[day.dow] || day.dow : day.dow;
+}
+
+function formatDayDate(day) {
+  if (!day.date_iso) return day.date;
+  const options =
+    state.lang === "en"
+      ? { day: "2-digit", month: "short", timeZone: "Europe/Berlin" }
+      : { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" };
+  return dateFromIsoDay(day.date_iso).toLocaleDateString(locale(), options);
+}
+
+function dateFromIsoDay(value) {
+  return new Date(`${value}T12:00:00Z`);
+}
+
+initLanguageToggle();
 load();

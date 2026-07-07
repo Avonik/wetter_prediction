@@ -201,6 +201,7 @@ def _our_daily_highlow(our_hourly: pl.DataFrame, days: int = 7) -> list[dict]:
         {
             "dow": _DOW[r["d"].weekday()],
             "date": r["d"].strftime("%d.%m."),
+            "date_iso": r["d"].isoformat(),
             "tmin": round(float(r["tmin"])),
             "tmax": round(float(r["tmax"])),
         }

@@ -21,6 +21,13 @@
         </div>
       </div>
       <div class="topright">
+        <label class="lang-toggle" for="langToggle">
+          <span class="lang-label" data-i18n="languageLabel">Sprache</span>
+          <span class="lang-code">DE</span>
+          <input id="langToggle" type="checkbox" />
+          <span class="switch" aria-hidden="true"></span>
+          <span class="lang-code">EN</span>
+        </label>
         <span id="updated" class="muted small">—</span>
       </div>
     </header>
@@ -37,8 +44,8 @@
         </div>
         <div class="hero-chips">
           <div class="chip"><span class="chip-k">Wind</span><span id="c-wind" class="chip-v">–</span></div>
-          <div class="chip"><span class="chip-k">Feuchte</span><span id="c-hum" class="chip-v">–</span></div>
-          <div class="chip"><span class="chip-k">Bewölkung</span><span id="c-cloud" class="chip-v">–</span></div>
+          <div class="chip"><span class="chip-k" data-i18n="humidity">Feuchte</span><span id="c-hum" class="chip-v">–</span></div>
+          <div class="chip"><span class="chip-k" data-i18n="cloudCover">Bewölkung</span><span id="c-cloud" class="chip-v">–</span></div>
         </div>
       </section>
 
@@ -48,8 +55,8 @@
       <!-- hourly strip: our model at a glance -->
       <section class="card">
         <div class="card-head">
-          <h2>Nächste Stunden</h2>
-          <p class="muted small">Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.</p>
+          <h2 data-i18n="hoursTitle">Nächste Stunden</h2>
+          <p class="muted small" data-i18n="hoursSubtitle">Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.</p>
         </div>
         <div id="hourstrip" class="hourstrip"></div>
       </section>
@@ -57,8 +64,8 @@
       <!-- hourly chart -->
       <section class="card">
         <div class="card-head">
-          <h2>48-Stunden-Verlauf &amp; Modellvergleich</h2>
-          <p class="muted small"><b style="color:#ffd166">Unser Modell</b> (dicke Linie + 80 %-Band) gegen die großen Wettermodelle (gestrichelt).</p>
+          <h2 data-i18n="chartTitle">48-Stunden-Verlauf &amp; Modellvergleich</h2>
+          <p class="muted small" data-i18n-html="chartSubtitle"><b style="color:#ffd166">Unser Modell</b> (dicke Linie + 80 %-Band) gegen die großen Wettermodelle (gestrichelt).</p>
         </div>
         <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
       </section>
@@ -66,13 +73,13 @@
       <!-- 7 day strip -->
       <section class="card">
         <div class="card-head">
-          <h2>7-Tage-Vorhersage</h2>
-          <p class="muted small">Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).</p>
+          <h2 data-i18n="dailyTitle">7-Tage-Vorhersage</h2>
+          <p class="muted small" data-i18n="dailySubtitle">Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).</p>
         </div>
         <div id="daily" class="daily"></div>
       </section>
 
-      <section class="note">
+      <section class="note" data-i18n-html="note">
         <strong>Wie diese Vorhersage entsteht.</strong> Sie kombiniert mehrere Profi-Wettermodelle
         (ICON-D2, ICON-EU, ECMWF, GFS), korrigiert deren lokale Fehler für die Station Wendisch Evern
         und bezieht die aktuelle Messung mit ein. Ergebnis: Temperatur mit Unsicherheitsband und
@@ -82,11 +89,11 @@
       </section>
     </main>
 
-    <div id="loading" class="state"><div class="spinner"></div><p>Lade aktuelle Vorhersage…</p></div>
+    <div id="loading" class="state"><div class="spinner"></div><p data-i18n="loading">Lade aktuelle Vorhersage…</p></div>
     <div id="error" class="state" hidden></div>
 
     <footer class="foot muted small">
-      <div>
+      <div data-i18n-html="footerData">
         Wetterdaten: <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0) ·
         Stationsdaten: <a href="https://brightsky.dev">Bright Sky</a> / DWD ·
         kein offizielles Wetterprodukt.
@@ -96,6 +103,7 @@
         href="https://buymeacoffee.com/julianhermes?new=1"
         target="_blank"
         rel="noopener noreferrer"
+        data-i18n="supportProject"
       >
         Projekt unterstützen
       </a>

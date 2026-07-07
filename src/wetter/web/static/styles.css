@@ -38,6 +38,32 @@ a:hover { text-decoration: underline; }
 .brand h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; }
 .brand .pin { font-size: 1.6rem; }
 .topright { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lang-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 34px; padding: 5px 10px; border: 1px solid var(--stroke);
+  border-radius: 999px; background: rgba(255, 255, 255, 0.08);
+  color: var(--text); cursor: pointer; user-select: none;
+}
+.lang-label, .lang-code { font-size: 0.74rem; font-weight: 700; }
+.lang-label { color: var(--muted); }
+.lang-code { color: var(--text); }
+.lang-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.switch {
+  position: relative; width: 38px; height: 22px; flex: 0 0 auto;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.switch::after {
+  content: ""; position: absolute; left: 3px; top: 3px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
+}
+.lang-toggle input:checked + .switch::after { transform: translateX(16px); }
+.lang-toggle:focus-within {
+  outline: 2px solid rgba(255, 209, 102, 0.8);
+  outline-offset: 3px;
+}
 .badge {
   background: rgba(255, 209, 102, 0.16); color: var(--accent);
   border: 1px solid rgba(255, 209, 102, 0.4); padding: 6px 12px;
