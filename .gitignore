@@ -48,6 +48,9 @@ htmlcov/
 .playwright-mcp/
 /luneburg-weather*.png
 
+# --- Local Codex/Superpowers notes ---
+/docs/superpowers/
+
 # --- Secrets / local config ---
 .env
 .env.local
