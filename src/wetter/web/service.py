@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import polars as pl
 
 from wetter import config
-from wetter.data import io, live, rain_dataset
+from wetter.data import io, live, observations, rain_dataset
 from wetter.models import engine
 from wetter.models import rain as rain_model
 
@@ -89,6 +89,30 @@ def fetch_alerts() -> list[dict]:
     return out
 
 
+def current_precip(issue: datetime) -> float | None:
+    """Most recent OBSERVED precipitation (mm/h) at the station — the rain-persistence
+    signal 'is it raining right now'. Read from the same DWD /weather obs the model was
+    trained on (p_obs); Bright Sky's /current_weather frequently omits precipitation."""
+    try:
+        lo = (issue - timedelta(hours=4)).date().isoformat()
+        hi = issue.date().isoformat()
+        payload = io.get_json(
+            observations._URL,
+            {"dwd_station_id": config.STATION_ID, "date": lo, "last_date": hi, "tz": "UTC"},
+        )
+    except Exception:  # noqa: BLE001 — persistence is optional; never break the page
+        return None
+    best = None
+    for r in payload.get("weather", []) or []:
+        p = r.get("precipitation")
+        if p is None:
+            continue
+        t = datetime.fromisoformat(r["timestamp"]).astimezone(timezone.utc)
+        if t <= issue and (best is None or t >= best[0]):
+            best = (t, float(p))
+    return best[1] if best else None
+
+
 def _rain_category(p: float | None, p1: float | None) -> str:
     if p is None or p < 0.2:
         return "trocken"
@@ -99,7 +123,9 @@ def _rain_category(p: float | None, p1: float | None) -> str:
     return "evtl. Schauer"
 
 
-def _rain_bundle(issue: datetime, live_fc_long: pl.DataFrame) -> tuple[dict, dict]:
+def _rain_bundle(
+    issue: datetime, live_fc_long: pl.DataFrame, current_precip: float | None = None
+) -> tuple[dict, dict]:
     """Our calibrated P(rain) over the whole week: hourly detail (0-48 h shown) plus a
     daily rain chance (max hourly probability per German day) — all from our model, so
     long-range days honestly regress toward climatology instead of over-confident 100%."""
@@ -110,7 +136,9 @@ def _rain_bundle(issue: datetime, live_fc_long: pl.DataFrame) -> tuple[dict, dic
     except (FileNotFoundError, OSError):
         return rain_hourly, daily_chance
 
-    rows = rain_dataset.build_live_rain_rows(issue, live_fc_long, list(range(1, 169)))
+    rows = rain_dataset.build_live_rain_rows(
+        issue, live_fc_long, list(range(1, 169)), current_precip
+    )
     probs = rain_model.predict_rain(art, rows)
     p01, p1 = probs.get(0.1), probs.get(1.0)
     if p01 is None:
@@ -210,8 +238,12 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
     hourly = _fc_rows(fc_all.filter(pl.col("lead_time_h") <= 48))  # strip + chart (next 48 h)
     daily = _our_daily_highlow(fc_all, 7)  # our model's daily high/low over the week
 
-    # rain: calibrated hourly P(rain) + daily rain chance
-    rain_hourly, daily_chance = _rain_bundle(issue, live_fc_long)
+    # rain: calibrated hourly P(rain) + daily rain chance. Feed the current observed rain
+    # (persistence) from the DWD obs, falling back to Bright Sky's current_weather field.
+    cprecip = current_precip(issue)
+    if cprecip is None:
+        cprecip = current.get("precip")
+    rain_hourly, daily_chance = _rain_bundle(issue, live_fc_long, cprecip)
     for h in hourly:
         r = rain_hourly.get(h["t"])
         h["rain_p"] = r["p"] if r else None

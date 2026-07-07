@@ -49,6 +49,17 @@ def build_rain_canonical(obs: pl.DataFrame, runs: pl.DataFrame) -> pl.DataFrame:
         (pl.col("valid_time") - pl.duration(hours=pl.col("lead_time_h"))).alias("issue_time")
     )
     canon = canon.join(obs.select(["valid_time", "p_obs"]), on="valid_time", how="left")
+    # rain persistence: how much did it rain at the moment the run was issued? Strong
+    # short-lead signal ("it's raining now -> likely still raining soon") that the NWP
+    # forecast alone misses. Left null where the station has no obs at that hour.
+    canon = canon.join(
+        obs.select(
+            pl.col("valid_time").alias("issue_time"),
+            pl.col("p_obs").alias("p_obs_at_issue"),
+        ),
+        on="issue_time",
+        how="left",
+    )
     canon = features.add_time_features(canon)
     canon = canon.with_columns((pl.col("p_obs") >= RAIN_THRESH).cast(pl.Int8).alias("rain_occ"))
     return (
@@ -59,10 +70,15 @@ def build_rain_canonical(obs: pl.DataFrame, runs: pl.DataFrame) -> pl.DataFrame:
 
 
 def build_live_rain_rows(
-    current_time: datetime, live_fc_long: pl.DataFrame, leads: list[int]
+    current_time: datetime,
+    live_fc_long: pl.DataFrame,
+    leads: list[int],
+    current_precip: float | None = None,
 ) -> pl.DataFrame:
-    """Rain features (per-model precip + agreement + cloud/humidity + time) for a
-    forecast issued now, one row per lead — mirrors build_rain_canonical."""
+    """Rain features (per-model precip + agreement + cloud/humidity + time + rain
+    persistence) for a forecast issued now, one row per lead — mirrors
+    build_rain_canonical. `current_precip` = observed rain now (mm/h), the persistence
+    feature `p_obs_at_issue`; None when the station reports nothing."""
     issue = current_time.replace(minute=0, second=0, microsecond=0)
     rows_meta = [(lead, issue + timedelta(hours=lead)) for lead in leads]
     target_times = [vt for _, vt in rows_meta]
@@ -86,13 +102,20 @@ def build_live_rain_rows(
         pl.col("lead_time_h").cast(pl.Int32),
     )
     df = lead_map.join(wide, on="valid_time", how="left").join(aux_wide, on="valid_time", how="left")
+    df = df.with_columns(
+        pl.lit(None if current_precip is None else float(current_precip), dtype=pl.Float64).alias(
+            "p_obs_at_issue"
+        )
+    )
     return features.add_time_features(df).sort("lead_time_h")
 
 
-def build_rain(*, cache_dir: Path | None = None, force_obs: bool = False) -> Path:
+def build_rain(
+    *, cache_dir: Path | None = None, cached_only: bool = False, force_obs: bool = False
+) -> Path:
     today = datetime.now(timezone.utc).date().isoformat()
     obs = observations.fetch_observations(config.FORECAST_START, today, force=force_obs)
-    runs = single_runs.fetch_runs(config.SINGLE_RUNS_START, today)
+    runs = single_runs.fetch_runs(config.SINGLE_RUNS_START, today, cached_only=cached_only)
     canon = build_rain_canonical(obs, runs)
     out = (cache_dir or config.CURATED_DIR) / "canonical_rain.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)

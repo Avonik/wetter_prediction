@@ -70,14 +70,20 @@ def fetch_runs(
     end: str,
     *,
     models: list[str] = config.MODELS,
-    run_hours: tuple[int, ...] = (0,),
+    run_hours: tuple[int, ...] | None = None,
     max_lead_h: int | None = None,
     cache_dir: Path | None = None,
+    concurrency: int = 1,
+    cached_only: bool = False,
     force: bool = False,
 ) -> pl.DataFrame:
     """Sample issued runs (one per `run_hours` per day) per model, cached per run.
-    Missing runs (HTTP 400) are cached as empty so re-runs skip them."""
+    Missing runs (HTTP 400) are cached as empty so re-runs skip them. With
+    `cached_only=True`, only runs already on disk are read — nothing is fetched
+    (build from what we have without hitting the rate-limited API)."""
     max_lead_h = max_lead_h or config.HOURLY_MAX_LEAD_H
+    if run_hours is None:
+        run_hours = config.RUN_HOURS
     root = cache_dir if cache_dir is not None else config.RAW_DIR / "single_runs"
     items: list = []
     d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
@@ -101,8 +107,9 @@ def fetch_runs(
                                 "timezone": "GMT",
                             },
                         )
-                    except (httpx.HTTPError, ValueError):
-                        # missing run (400), exhausted retries, or bad body -> skip
+                    except httpx.HTTPStatusError:
+                        # genuine 400 -> this run does not exist; cache as empty.
+                        # (Transient rate-limit/network errors propagate and are retried.)
                         return _empty()
                     df = parse_run(payload, model, run_iso)
                     return df.filter(
@@ -111,5 +118,7 @@ def fetch_runs(
 
                 items.append((path, builder))
             d = d + timedelta(days=1)
-    frames = io.cached_parquet_many(items, force=force)
+    if cached_only:
+        items = [(p, b) for p, b in items if p.exists()]
+    frames = io.cached_parquet_many(items, force=force, concurrency=concurrency)
     return pl.concat(frames) if frames else _empty()

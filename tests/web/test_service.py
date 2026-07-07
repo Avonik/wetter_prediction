@@ -29,6 +29,26 @@ def test_weather_emoji_specificity():
     assert service._weather_emoji("thunderstorm", "thunderstorm", 90, 2) == "⛈️"
 
 
+def test_current_precip_takes_latest_observed(monkeypatch):
+    payload = {"weather": [
+        {"timestamp": "2026-07-02T13:00:00+00:00", "precipitation": 0.0},
+        {"timestamp": "2026-07-02T14:00:00+00:00", "precipitation": 1.2},  # latest non-null <= issue
+        {"timestamp": "2026-07-02T15:00:00+00:00", "precipitation": None},
+        {"timestamp": "2026-07-02T16:00:00+00:00", "precipitation": 3.0},  # after issue -> ignored
+    ]}
+    monkeypatch.setattr(service.io, "get_json", lambda url, params: payload)
+    issue = datetime(2026, 7, 2, 15, tzinfo=timezone.utc)
+    assert service.current_precip(issue) == 1.2
+
+
+def test_current_precip_tolerates_failure(monkeypatch):
+    def boom(url, params):
+        raise RuntimeError("obs down")
+
+    monkeypatch.setattr(service.io, "get_json", boom)
+    assert service.current_precip(datetime(2026, 7, 2, 15, tzinfo=timezone.utc)) is None
+
+
 def test_fetch_alerts_parses(monkeypatch):
     payload = {"alerts": [{
         "headline_de": "Amtliche Warnung vor Windböen", "event_de": "WINDBÖEN",

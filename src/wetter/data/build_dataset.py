@@ -39,6 +39,9 @@ def mean_grid_elevation(forecasts: pl.DataFrame) -> float:
 def build_canonical(
     obs: pl.DataFrame, forecasts: pl.DataFrame, climatology: pl.DataFrame
 ) -> pl.DataFrame:
+    # the temperature model only needs t_obs; obs also carries p_obs (rain target),
+    # which would otherwise collide across the several obs joins below.
+    obs = obs.select(["valid_time", "t_obs"])
     wide = assemble_wide(forecasts)
     canon = wide.with_columns(
         (pl.col("valid_time") - pl.duration(hours=pl.col("lead_time_h"))).alias("issue_time")
@@ -83,8 +86,9 @@ def build_hourly(
     cache_dir: Path | None = None,
     start: str | None = None,
     end: str | None = None,
-    run_hours: tuple[int, ...] = (0,),
+    run_hours: tuple[int, ...] | None = None,
     max_lead_h: int | None = None,
+    cached_only: bool = False,
     force: bool = False,
 ) -> Path:
     """Build the hourly-lead canonical table from Single Runs forecasts. Reuses
@@ -97,7 +101,8 @@ def build_hourly(
 
     obs = observations.fetch_observations(config.FORECAST_START, today)
     runs = single_runs.fetch_runs(
-        start, end, run_hours=run_hours, max_lead_h=max_lead_h, force=force
+        start, end, run_hours=run_hours, max_lead_h=max_lead_h,
+        cached_only=cached_only, force=force,
     )
     clim = climatology.compute_climatology(climatology.fetch_era5(config.OBS_START, today))
     canon = build_canonical(obs, runs.drop("run_time"), clim)

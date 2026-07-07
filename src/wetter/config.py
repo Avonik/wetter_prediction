@@ -15,6 +15,9 @@ FORECAST_START = "2024-01-01"
 # Single Runs API (honest hourly-lead forecast history) — ICON-D2 coverage starts ~Sep 2025.
 SINGLE_RUNS_START = "2025-09-01"
 HOURLY_MAX_LEAD_H = 168  # full 7 days (ICON-D2 ~48h, ECMWF reaches 168h)
+# train on 4 daily model runs so lead time and hour-of-day are decorrelated
+# (with a single 00-UTC run they are confounded -> models memorise time instead of physics)
+RUN_HOURS = (0, 6, 12, 18)
 
 _ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = _ROOT / "data"

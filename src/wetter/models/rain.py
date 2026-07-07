@@ -14,12 +14,19 @@ RAIN_ENGINE_PATH = config.DATA_DIR / "models" / "rain_engine.joblib"
 # exceedance thresholds (mm/h): 0.1 = "rain at all", 1 = notable, 5 = heavy
 THRESHOLDS = (0.1, 1.0, 5.0)
 
+# Predictors: physics only (per-model precip + agreement + cloud/humidity) plus rain
+# PERSISTENCE (p_obs_at_issue = was it raining when the run was issued?). We deliberately
+# EXCLUDE hour/doy/lead_time. Our runs are still ~80% 00-UTC, so lead time and hour-of-day
+# stay heavily correlated; letting the model see them makes it memorise date/hour instead of
+# reading the precip signal — a backtest with them in scored WORSE than climatology
+# (BSS -0.05, 76% of importance on time). Physics + persistence generalises to any issue hour
+# and, crucially, lets "it's raining right now" raise the near-term probability.
 _FEATURES = [
     "precip_icon_d2", "precip_icon_eu", "precip_icon_global",
     "precip_gfs_seamless", "precip_ecmwf_ifs025",
     "precip_mean", "precip_max", "precip_prob",
     "cloud_mean", "rh_mean",
-    "hour_sin", "hour_cos", "doy_sin", "doy_cos", "lead_time_h",
+    "p_obs_at_issue",
 ]
 
 _PARAMS = dict(
@@ -33,6 +40,12 @@ def feature_columns(df: pl.DataFrame) -> list[str]:
 
 
 def _X(df: pl.DataFrame, feats: list[str]):
+    # Tolerate a df that is missing a trained feature (e.g. a live row schema slightly
+    # behind the engine): add it as null so LightGBM treats it as "missing" instead of
+    # crashing the whole page. Keeps predict robust to feature drift.
+    missing = [f for f in feats if f not in df.columns]
+    if missing:
+        df = df.with_columns([pl.lit(None, dtype=pl.Float64).alias(f) for f in missing])
     return df.select(feats).to_pandas()
 
 
