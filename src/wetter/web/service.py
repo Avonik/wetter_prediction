@@ -94,8 +94,8 @@ def current_precip(issue: datetime) -> float | None:
     signal 'is it raining right now'. Read from the same DWD /weather obs the model was
     trained on (p_obs); Bright Sky's /current_weather frequently omits precipitation."""
     try:
-        lo = (issue - timedelta(hours=4)).date().isoformat()
-        hi = issue.date().isoformat()
+        lo = (issue - timedelta(hours=4)).isoformat().replace("+00:00", "Z")
+        hi = issue.isoformat().replace("+00:00", "Z")
         payload = io.get_json(
             observations._URL,
             {"dwd_station_id": config.STATION_ID, "date": lo, "last_date": hi, "tz": "UTC"},
@@ -123,6 +123,18 @@ def _rain_category(p: float | None, p1: float | None) -> str:
     return "evtl. Schauer"
 
 
+def _blend_live_pop(model_p: float, pop_percent: float | None) -> float:
+    """Use upstream live PoP as a floor for the displayed chance of any rain.
+
+    The trained rain model predicts observed hourly precipitation >= 0.1 mm. That is
+    good for measurable rain, but it under-reads trace drizzle in the first hours when
+    NWP amount fields are 0.0 while probability-of-precipitation is still elevated.
+    """
+    if pop_percent is None:
+        return model_p
+    return max(model_p, min(max(float(pop_percent) / 100.0, 0.0), 1.0))
+
+
 def _rain_bundle(
     issue: datetime, live_fc_long: pl.DataFrame, current_precip: float | None = None
 ) -> tuple[dict, dict]:
@@ -143,8 +155,9 @@ def _rain_bundle(
     p01, p1 = probs.get(0.1), probs.get(1.0)
     if p01 is None:
         return rain_hourly, daily_chance
-    for i, vt in enumerate(rows["valid_time"].to_list()):
-        p = float(p01[i])
+    for i, row in enumerate(rows.iter_rows(named=True)):
+        vt = row["valid_time"]
+        p = _blend_live_pop(float(p01[i]), row.get("pop_mean"))
         pm = float(p1[i]) if p1 is not None else None
         rain_hourly[vt.isoformat()] = {"p": round(p, 2), "cat": _rain_category(p, pm)}
         d = vt.astimezone(_TZ).strftime("%d.%m.")

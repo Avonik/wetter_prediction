@@ -41,6 +41,20 @@ def test_current_precip_takes_latest_observed(monkeypatch):
     assert service.current_precip(issue) == 1.2
 
 
+def test_current_precip_uses_exact_recent_window(monkeypatch):
+    seen = {}
+
+    def fake_get_json(url, params):
+        seen.update(params)
+        return {"weather": []}
+
+    monkeypatch.setattr(service.io, "get_json", fake_get_json)
+    issue = datetime(2026, 7, 2, 15, tzinfo=timezone.utc)
+    service.current_precip(issue)
+    assert seen["date"] == "2026-07-02T11:00:00Z"
+    assert seen["last_date"] == "2026-07-02T15:00:00Z"
+
+
 def test_current_precip_tolerates_failure(monkeypatch):
     def boom(url, params):
         raise RuntimeError("obs down")
@@ -68,6 +82,12 @@ def test_fetch_alerts_tolerates_failure(monkeypatch):
 
     monkeypatch.setattr(service.io, "get_json", boom)
     assert service.fetch_alerts() == []  # never breaks the page
+
+
+def test_blend_live_pop_uses_probability_floor():
+    assert service._blend_live_pop(0.02, 30.0) == 0.3
+    assert service._blend_live_pop(0.45, 30.0) == 0.45
+    assert service._blend_live_pop(0.2, None) == 0.2
 
 
 def test_models_hourly_window_and_labels():

@@ -10,6 +10,12 @@ from wetter.data.forecasts import VARS
 _FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 _CURRENT_URL = "https://api.brightsky.dev/current_weather"
 
+# Live-only signals. The historical single-runs API does not expose these
+# consistently, so keep them out of forecasts.VARS and use them only at serving time.
+_LIVE_VARS = VARS + [
+    ("pop", "precipitation_probability"),
+]
+
 
 def parse_current_obs(payload: dict) -> tuple[datetime, float]:
     cw = payload["weather"]
@@ -33,7 +39,7 @@ def parse_live_forecast(payload: dict, model: str) -> pl.DataFrame:
     )
     elev = float(payload.get("elevation") or config.STATION_ELEV_M)
     frames = []
-    for internal, api in VARS:
+    for internal, api in _LIVE_VARS:
         if api not in hourly:
             continue
         frames.append(
@@ -48,7 +54,7 @@ def parse_live_forecast(payload: dict, model: str) -> pl.DataFrame:
 
 
 def fetch_live_forecast(*, models: list[str] = config.MODELS, forecast_days: int = 8) -> pl.DataFrame:
-    hourly = ",".join(api for _, api in VARS)
+    hourly = ",".join(api for _, api in _LIVE_VARS)
     frames = []
     for model in models:
         payload = io.get_json(

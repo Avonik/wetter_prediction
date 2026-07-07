@@ -1,5 +1,7 @@
-import polars as pl
 from datetime import datetime, timezone
+
+import polars as pl
+
 from wetter.data import rain_dataset as rd
 
 
@@ -39,3 +41,24 @@ def test_rain_occ_zero_when_dry():
     )
     canon = rd.build_rain_canonical(obs, _runs())
     assert canon.row(0, named=True)["rain_occ"] == 0
+
+
+def test_build_live_rain_rows_keeps_live_pop():
+    issue = _dt(1, 0)
+    valid = _dt(1, 1)
+    rows = []
+    for model, pop in [("gfs_seamless", 30.0), ("ecmwf_ifs025", 50.0)]:
+        for variable, value in [
+            ("precip", 0.0), ("pop", pop), ("cloud", 90.0), ("rh", 80.0),
+        ]:
+            rows.append(
+                {
+                    "valid_time": valid, "model": model, "variable": variable,
+                    "value": value, "grid_elev": 22.0,
+                }
+            )
+    live = pl.DataFrame(rows).with_columns(pl.col("valid_time").cast(pl.Datetime("us", "UTC")))
+    out = rd.build_live_rain_rows(issue, live, [1], current_precip=0.0)
+    row = out.row(0, named=True)
+    assert row["pop_mean"] == 40.0
+    assert row["pop_max"] == 50.0
