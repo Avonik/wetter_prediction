@@ -1,5 +1,6 @@
 import polars as pl
 from datetime import datetime, timedelta, timezone
+import httpx
 from wetter.web import service
 
 
@@ -16,6 +17,56 @@ def test_fetch_current_parses(monkeypatch):
     assert cur["temperature"] == 18.4
     assert cur["icon_raw"] == "clear-day"  # emoji is derived later in assemble()
     assert cur["humidity"] == 55
+
+
+def test_fetch_current_falls_back_to_latest_real_station_observation(monkeypatch):
+    forecast_source = 10
+    observation_source = 20
+    fallback = {
+        "sources": [
+            {"id": forecast_source, "observation_type": "forecast", "station_name": "WENDISCH EVERN"},
+            {"id": observation_source, "observation_type": "current", "station_name": "WENDISCH EVERN"},
+        ],
+        "weather": [
+            {
+                "source_id": observation_source,
+                "timestamp": "2026-07-13T19:00:00+00:00",
+                "temperature": 17.2,
+            },
+            {
+                "source_id": observation_source,
+                "timestamp": "2026-07-13T20:00:00+00:00",
+                "temperature": 16.8,
+                "condition": "dry",
+            },
+            {
+                "source_id": forecast_source,
+                "timestamp": "2026-07-13T21:00:00+00:00",
+                "temperature": 18.0,
+            },
+        ],
+    }
+    calls = []
+
+    def fake_get_json(url, params):
+        calls.append((url, params))
+        if len(calls) == 1:
+            request = httpx.Request("GET", url)
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        return fallback
+
+    monkeypatch.setattr(service.io, "get_json", fake_get_json)
+    cur = service.fetch_current()
+
+    assert cur["temperature"] == 16.8
+    assert cur["time"] == "2026-07-13T20:00:00+00:00"
+    assert cur["data_notice"] == {
+        "kind": "station_stale",
+        "station": "Wendisch Evern",
+        "observed_at": "2026-07-13T20:00:00+00:00",
+    }
+    assert calls[1][1]["dwd_station_id"] == "06093"
 
 
 def test_weather_emoji_specificity():

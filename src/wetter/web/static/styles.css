@@ -139,6 +139,14 @@ a:hover { text-decoration: underline; }
 .note em { color: #fff; font-style: normal; font-weight: 600; }
 
 /* weather warnings (DWD) */
+.data-notice {
+  display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; padding: 12px 15px;
+  border-radius: 14px; background: rgba(109, 179, 255, 0.11);
+  border: 1px solid rgba(109, 179, 255, 0.35);
+}
+.data-notice-icon { font-size: 1.25rem; line-height: 1.25; }
+.data-notice-title { color: #fff; font-size: 0.9rem; font-weight: 700; }
+.data-notice-text { color: var(--muted); font-size: 0.8rem; line-height: 1.45; margin-top: 2px; }
 .warnings { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
 .warn {
   display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px;

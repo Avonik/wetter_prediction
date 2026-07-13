@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=lang-toggle-1" />
+  <link rel="stylesheet" href="/static/styles.css?v=station-fallback-1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -33,6 +33,14 @@
     </header>
 
     <main id="content" hidden>
+      <section id="dataNotice" class="data-notice" hidden>
+        <span class="data-notice-icon" aria-hidden="true">🕒</span>
+        <div>
+          <div id="dataNoticeTitle" class="data-notice-title"></div>
+          <div id="dataNoticeText" class="data-notice-text"></div>
+        </div>
+      </section>
+
       <!-- current weather hero -->
       <section id="hero" class="hero">
         <div class="hero-main">
@@ -109,6 +117,6 @@
       </a>
     </footer>
   </div>
-  <script src="/static/app.js?v=lang-toggle-1" defer></script>
+  <script src="/static/app.js?v=station-fallback-1" defer></script>
 </body>
 </html>

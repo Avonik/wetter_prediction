@@ -33,6 +33,11 @@ const I18N = {
     currentFallback: "aktuell",
     until: "bis",
     errorTitle: "⚠️ Vorhersage konnte nicht geladen werden.",
+    invalidServerResponse: "Der Wetterserver hat keine gültige Antwort geliefert.",
+    stationStaleTitle: "Wetterstation derzeit ohne aktuelle Daten",
+    stationStaleText: (station, observedAt) =>
+      `${station} liefert gerade keine neuen Messwerte. Deshalb werden die neuesten verfügbaren ` +
+      `Stationsdaten vom ${observedAt} verwendet. Das liegt an der Datenbereitstellung der Wetterstation.`,
     bandLabel: "80 %-Band",
     ourModelLabel: "Unser Modell",
     conditions: {
@@ -79,6 +84,11 @@ const I18N = {
     currentFallback: "current",
     until: "until",
     errorTitle: "⚠️ Forecast could not be loaded.",
+    invalidServerResponse: "The weather server did not return a valid response.",
+    stationStaleTitle: "Weather station currently has no fresh data",
+    stationStaleText: (station, observedAt) =>
+      `${station} is currently not providing new observations. The latest available station data ` +
+      `from ${observedAt} is being used instead. This is caused by the station's data availability.`,
     bandLabel: "80% band",
     ourModelLabel: "Our model",
     conditions: {
@@ -165,6 +175,10 @@ function initLanguageToggle() {
 async function load() {
   try {
     const res = await fetch("/api/forecast");
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      throw new Error(`${tr().invalidServerResponse} (HTTP ${res.status})`);
+    }
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || res.statusText);
     render(data);
@@ -215,10 +229,29 @@ function render(d) {
   $("c-cloud").textContent = c.cloud_cover != null ? Math.round(c.cloud_cover) + " %" : "–";
   tintHero(c.temperature);
 
+  renderDataNotice(d.data_notice);
   renderWarnings(d.alerts);
   renderHourStrip(d.hourly);
   renderChart(d);
   renderDaily(d.daily);
+}
+
+function renderDataNotice(notice) {
+  const el = $("dataNotice");
+  if (!notice || notice.kind !== "station_stale") {
+    el.hidden = true;
+    return;
+  }
+  const observedAt = new Date(notice.observed_at).toLocaleString(locale(), {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+  $("dataNoticeTitle").textContent = tr().stationStaleTitle;
+  $("dataNoticeText").textContent = tr().stationStaleText(notice.station, observedAt);
+  el.hidden = false;
 }
 
 function formatCondition(condition) {

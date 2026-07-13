@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import httpx
 import polars as pl
 
 from wetter import config
@@ -14,6 +15,8 @@ _TTL_S = 600  # serve a cached bundle for 10 min to avoid hammering the upstream
 _CACHE: dict = {"ts": -1e18, "data": None}
 
 _ALERTS_URL = "https://api.brightsky.dev/alerts"
+_RECENT_WEATHER_URL = "https://api.brightsky.dev/weather"
+_CURRENT_FALLBACK_DAYS = 7
 
 
 def _weather_emoji(condition, icon_raw, cloud_cover, precip) -> str:
@@ -52,20 +55,64 @@ _TZ = ZoneInfo("Europe/Berlin")
 _DOW = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 
-def fetch_current() -> dict:
-    payload = io.get_json(live._CURRENT_URL, {"dwd_station_id": config.STATION_ID, "tz": "UTC"})
-    w = payload["weather"]
+def _current_fields(w: dict) -> dict:
     t = datetime.fromisoformat(w["timestamp"]).astimezone(timezone.utc)
     return {
         "time": t.isoformat(),
         "temperature": w.get("temperature"),
         "condition": w.get("condition"),
         "icon_raw": w.get("icon"),  # Bright Sky icon string (day/night hint); emoji set in assemble
-        "wind_speed": w.get("wind_speed"),
+        "wind_speed": w.get("wind_speed", w.get("wind_speed_10")),
         "humidity": w.get("relative_humidity"),
         "cloud_cover": w.get("cloud_cover"),
-        "precip": w.get("precipitation"),  # mm/h now (is it raining?)
+        "precip": w.get("precipitation", w.get("precipitation_60")),
     }
+
+
+def _latest_station_observation() -> tuple[dict, str]:
+    """Return the newest real observation for our station, excluding forecast rows."""
+    now = datetime.now(timezone.utc)
+    lo = now - timedelta(days=_CURRENT_FALLBACK_DAYS)
+    payload = io.get_json(
+        _RECENT_WEATHER_URL,
+        {
+            "dwd_station_id": config.STATION_ID,
+            "date": lo.isoformat().replace("+00:00", "Z"),
+            "last_date": now.isoformat().replace("+00:00", "Z"),
+            "tz": "UTC",
+        },
+    )
+    sources = {s["id"]: s for s in payload.get("sources", [])}
+    observed = [
+        row
+        for row in payload.get("weather", [])
+        if sources.get(row.get("source_id"), {}).get("observation_type")
+        in {"current", "historical", "synop"}
+        and row.get("temperature") is not None
+    ]
+    if not observed:
+        raise LookupError("No recent station observation available")
+    latest = max(observed, key=lambda row: datetime.fromisoformat(row["timestamp"]))
+    source = sources.get(latest.get("source_id"), {})
+    station_name = (source.get("station_name") or "Wendisch Evern").title()
+    return latest, station_name
+
+
+def fetch_current() -> dict:
+    try:
+        payload = io.get_json(
+            live._CURRENT_URL, {"dwd_station_id": config.STATION_ID, "tz": "UTC"}
+        )
+        return _current_fields(payload["weather"])
+    except (httpx.HTTPStatusError, io.Transient, KeyError, TypeError, ValueError):
+        w, station_name = _latest_station_observation()
+        current = _current_fields(w)
+        current["data_notice"] = {
+            "kind": "station_stale",
+            "station": station_name,
+            "observed_at": current["time"],
+        }
+        return current
 
 
 def fetch_alerts() -> list[dict]:
@@ -229,6 +276,7 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
     # Bright Sky's current obs sometimes omits wind/cloud/humidity — fill from the
     # live model forecast at the current hour so the hero card is complete.
     current = dict(current)
+    data_notice = current.pop("data_notice", None)
     at_issue = live_fc_long.filter(pl.col("valid_time") == issue)
 
     def _now_var(var: str):
@@ -272,6 +320,7 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
         "hourly": hourly,
         "daily": daily,
         "models_hourly": _models_hourly(live_fc_long, issue, 48),
+        "data_notice": data_notice,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
