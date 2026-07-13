@@ -34,6 +34,17 @@ const I18N = {
     until: "bis",
     errorTitle: "⚠️ Vorhersage konnte nicht geladen werden.",
     invalidServerResponse: "Der Wetterserver hat keine gültige Antwort geliefert.",
+    apiErrors: {
+      ENGINE_NOT_AVAILABLE: "Das Vorhersagemodell ist derzeit nicht verfügbar.",
+      FORECAST_NOT_AVAILABLE: "Momentan ist keine Vorhersage verfügbar. Bitte versuche es gleich noch einmal.",
+    },
+    retry: "Erneut versuchen",
+    staleForecastTitle: "Letzte verfügbare Vorhersage",
+    staleForecastText: (refreshedAt, refreshing) =>
+      `Angezeigt wird die zuletzt erfolgreiche Vorhersage vom ${refreshedAt}. ` +
+      (refreshing
+        ? "Eine Aktualisierung läuft bereits im Hintergrund."
+        : "Die Wetterdienste konnten zuletzt nicht vollständig aktualisiert werden."),
     stationStaleTitle: "Wetterstation derzeit ohne aktuelle Daten",
     stationStaleText: (station, observedAt) =>
       `${station} liefert gerade keine neuen Messwerte. Deshalb werden die neuesten verfügbaren ` +
@@ -85,6 +96,17 @@ const I18N = {
     until: "until",
     errorTitle: "⚠️ Forecast could not be loaded.",
     invalidServerResponse: "The weather server did not return a valid response.",
+    apiErrors: {
+      ENGINE_NOT_AVAILABLE: "The forecast model is currently unavailable.",
+      FORECAST_NOT_AVAILABLE: "No forecast is currently available. Please try again shortly.",
+    },
+    retry: "Try again",
+    staleForecastTitle: "Latest available forecast",
+    staleForecastText: (refreshedAt, refreshing) =>
+      `Showing the last successful forecast from ${refreshedAt}. ` +
+      (refreshing
+        ? "An update is already running in the background."
+        : "The weather providers could not be fully refreshed recently."),
     stationStaleTitle: "Weather station currently has no fresh data",
     stationStaleText: (station, observedAt) =>
       `${station} is currently not providing new observations. The latest available station data ` +
@@ -173,6 +195,8 @@ function initLanguageToggle() {
 }
 
 async function load() {
+  $("loading").hidden = false;
+  $("error").hidden = true;
   try {
     const res = await fetch("/api/forecast");
     const contentType = res.headers.get("content-type") || "";
@@ -180,7 +204,11 @@ async function load() {
       throw new Error(`${tr().invalidServerResponse} (HTTP ${res.status})`);
     }
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    const apiMessage =
+      typeof data.error === "object" && data.error
+        ? tr().apiErrors[data.error.code] || data.error.message
+        : data.error;
+    if (!res.ok || data.error) throw new Error(apiMessage || res.statusText);
     render(data);
   } catch (e) {
     showError(e.message);
@@ -195,8 +223,19 @@ function showError(msg) {
 
 function renderError() {
   const el = $("error");
+  el.replaceChildren();
   el.hidden = false;
-  el.innerHTML = `<p>${tr().errorTitle}</p><p class="small">${state.error}</p>`;
+  const title = document.createElement("p");
+  title.textContent = tr().errorTitle;
+  const detail = document.createElement("p");
+  detail.className = "small";
+  detail.textContent = state.error;
+  const retry = document.createElement("button");
+  retry.className = "retry-button";
+  retry.type = "button";
+  retry.textContent = tr().retry;
+  retry.addEventListener("click", load);
+  el.append(title, detail, retry);
 }
 
 function render(d) {
@@ -229,11 +268,33 @@ function render(d) {
   $("c-cloud").textContent = c.cloud_cover != null ? Math.round(c.cloud_cover) + " %" : "–";
   tintHero(c.temperature);
 
+  renderForecastStatus(d.forecast_status);
   renderDataNotice(d.data_notice);
   renderWarnings(d.alerts);
   renderHourStrip(d.hourly);
   renderChart(d);
   renderDaily(d.daily);
+}
+
+function renderForecastStatus(status) {
+  const el = $("forecastNotice");
+  if (!status || !status.stale) {
+    el.hidden = true;
+    return;
+  }
+  const refreshedAt = new Date(status.refreshed_at).toLocaleString(locale(), {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+  $("forecastNoticeTitle").textContent = tr().staleForecastTitle;
+  $("forecastNoticeText").textContent = tr().staleForecastText(
+    refreshedAt,
+    status.refreshing
+  );
+  el.hidden = false;
 }
 
 function renderDataNotice(notice) {
@@ -262,38 +323,42 @@ function formatCondition(condition) {
 
 function renderWarnings(alerts) {
   const el = $("warnings");
+  el.replaceChildren();
   if (!alerts || !alerts.length) {
     el.hidden = true;
-    el.innerHTML = "";
     return;
   }
   el.hidden = false;
-  el.innerHTML = alerts
-    .map((a) => {
-      const sev = (a.severity || "").toLowerCase();
-      const until = a.expires
-        ? " · " +
-          tr().until +
-          " " +
-          new Date(a.expires).toLocaleString(locale(), {
-            weekday: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Europe/Berlin",
-          })
-        : "";
-      return (
-        `<div class="warn warn-${sev}"><span class="warn-ic">⚠️</span>` +
-        `<div><div class="warn-h">${a.headline}</div>` +
-        `<div class="warn-m">${a.event || ""}${until}</div></div></div>`
-      );
-    })
-    .join("");
+  for (const a of alerts) {
+    const sev = String(a.severity || "").toLowerCase();
+    const until = a.expires
+      ? " · " +
+        tr().until +
+        " " +
+        new Date(a.expires).toLocaleString(locale(), {
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Berlin",
+        })
+      : "";
+    const warning = document.createElement("div");
+    warning.className = `warn warn-${sev}`;
+    const icon = document.createElement("span");
+    icon.className = "warn-ic";
+    icon.textContent = "⚠️";
+    const body = document.createElement("div");
+    const headline = makeDiv("warn-h", a.headline || "");
+    const meta = makeDiv("warn-m", `${a.event || ""}${until}`);
+    body.append(headline, meta);
+    warning.append(icon, body);
+    el.appendChild(warning);
+  }
 }
 
 function renderHourStrip(hourly) {
   const el = $("hourstrip");
-  el.innerHTML = "";
+  el.replaceChildren();
   for (const h of hourly.slice(0, 12)) {
     const hr = new Date(h.t).toLocaleTimeString(locale(), {
       hour: "2-digit",
@@ -303,11 +368,12 @@ function renderHourStrip(hourly) {
     const card = document.createElement("div");
     card.className = "hourcard";
     const rain = h.rain_p != null ? "💧 " + Math.round(h.rain_p * 100) + "%" : "";
-    card.innerHTML =
-      `<div class="hr">${hr}</div>` +
-      `<div class="ht">${Math.round(h.point)}°</div>` +
-      `<div class="hrange">${Math.round(h.lo)}–${Math.round(h.hi)}°</div>` +
-      `<div class="hrain">${rain}</div>`;
+    card.append(
+      makeDiv("hr", hr),
+      makeDiv("ht", `${Math.round(h.point)}°`),
+      makeDiv("hrange", `${Math.round(h.lo)}–${Math.round(h.hi)}°`),
+      makeDiv("hrain", rain)
+    );
     el.appendChild(card);
   }
 }
@@ -378,17 +444,19 @@ function renderChart(d) {
 
 function renderDaily(daily) {
   const el = $("daily");
-  el.innerHTML = "";
+  el.replaceChildren();
   for (const day of daily) {
     const card = document.createElement("div");
     card.className = "day";
     const rain = day.rain_p != null ? "💧 " + Math.round(day.rain_p * 100) + "%" : "";
-    card.innerHTML =
-      `<div class="dow">${formatDayName(day)}</div><div class="date">${formatDayDate(day)}</div>` +
-      `<div class="hi">${day.tmax}°</div>` +
-      `<div class="lo">↓ ${day.tmin}°</div>` +
-      `<div class="drain">${rain}</div>` +
-      `<div class="spark"></div>`;
+    card.append(
+      makeDiv("dow", formatDayName(day)),
+      makeDiv("date", formatDayDate(day)),
+      makeDiv("hi", `${day.tmax}°`),
+      makeDiv("lo", `↓ ${day.tmin}°`),
+      makeDiv("drain", rain),
+      makeDiv("spark", "")
+    );
     el.appendChild(card);
   }
 }
@@ -414,6 +482,13 @@ function formatDayDate(day) {
 
 function dateFromIsoDay(value) {
   return new Date(`${value}T12:00:00Z`);
+}
+
+function makeDiv(className, text) {
+  const el = document.createElement("div");
+  el.className = className;
+  el.textContent = text;
+  return el;
 }
 
 initLanguageToggle();

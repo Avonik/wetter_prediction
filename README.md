@@ -68,8 +68,10 @@ wetter train-rain      # trained rain engine -> data/models/rain_engine.joblib
 wetter serve           # FastAPI website at http://127.0.0.1:8000
 ```
 
-The website endpoint is `/api/forecast`. It caches responses for 10 minutes; use
-`/api/forecast?force=true` while debugging live weather behavior.
+The website endpoint is `/api/forecast`. A background worker refreshes the forecast every
+10 minutes and persists the last successful snapshot under `data/cache/`, so requests keep
+returning immediately when an upstream provider is slow or temporarily unavailable. Health
+checks are available at `/health/live` and `/health/ready`.
 
 ## Report Pipeline
 

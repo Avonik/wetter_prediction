@@ -1,6 +1,7 @@
 from __future__ import annotations
-import time
+import logging
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -10,9 +11,11 @@ from wetter import config
 from wetter.data import io, live, observations, rain_dataset
 from wetter.models import engine
 from wetter.models import rain as rain_model
+from wetter.web.cache import ForecastStore
 
 _TTL_S = 600  # serve a cached bundle for 10 min to avoid hammering the upstream APIs
-_CACHE: dict = {"ts": -1e18, "data": None}
+_SNAPSHOT_PATH = config.DATA_DIR / "cache" / "forecast_snapshot.json"
+logger = logging.getLogger(__name__)
 
 _ALERTS_URL = "https://api.brightsky.dev/alerts"
 _RECENT_WEATHER_URL = "https://api.brightsky.dev/weather"
@@ -120,6 +123,7 @@ def fetch_alerts() -> list[dict]:
     try:
         payload = io.get_json(_ALERTS_URL, {"lat": config.LAT, "lon": config.LON, "tz": "UTC"})
     except Exception:  # noqa: BLE001  (warnings are optional; never break the page)
+        logger.warning("Weather alerts are currently unavailable", exc_info=True)
         return []
     out = []
     for a in payload.get("alerts", []) or []:
@@ -148,6 +152,7 @@ def current_precip(issue: datetime) -> float | None:
             {"dwd_station_id": config.STATION_ID, "date": lo, "last_date": hi, "tz": "UTC"},
         )
     except Exception:  # noqa: BLE001 — persistence is optional; never break the page
+        logger.warning("Current precipitation observation is unavailable", exc_info=True)
         return None
     best = None
     for r in payload.get("weather", []) or []:
@@ -325,11 +330,32 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
     }
 
 
-def bundle(*, force: bool = False) -> dict:
-    if not force and _CACHE["data"] is not None and (time.monotonic() - _CACHE["ts"] < _TTL_S):
-        return _CACHE["data"]
-    hourly_art = engine.load_engine(engine.HOURLY_ENGINE_PATH)
+@lru_cache(maxsize=1)
+def _load_hourly_engine() -> dict:
+    return engine.load_engine(engine.HOURLY_ENGINE_PATH)
+
+
+def _build_bundle() -> dict:
+    hourly_art = _load_hourly_engine()
     data = assemble(fetch_current(), live.fetch_live_forecast(), hourly_art)
     data["alerts"] = fetch_alerts()
-    _CACHE.update(ts=time.monotonic(), data=data)
     return data
+
+
+_FORECAST_STORE = ForecastStore(_build_bundle, _SNAPSHOT_PATH, ttl_s=_TTL_S)
+
+
+def bundle(*, force: bool = False) -> dict:
+    return _FORECAST_STORE.get(force=force)
+
+
+def start_background_refresh() -> None:
+    _FORECAST_STORE.start()
+
+
+def stop_background_refresh() -> None:
+    _FORECAST_STORE.stop()
+
+
+def cache_status() -> dict:
+    return _FORECAST_STORE.status()
