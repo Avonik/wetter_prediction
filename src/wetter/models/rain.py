@@ -1,10 +1,12 @@
 from __future__ import annotations
+from datetime import timedelta
 from pathlib import Path
 
 import joblib
 import lightgbm as lgb
 import numpy as np
 import polars as pl
+from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
 
 from wetter import config
@@ -33,6 +35,28 @@ _PARAMS = dict(
     n_estimators=400, learning_rate=0.05, num_leaves=31, min_child_samples=30,
     subsample=0.8, colsample_bytree=0.8, verbosity=-1,
 )
+
+_CALIBRATION_EPS = 0.005
+
+
+class BetaCalibrator:
+    """Smooth beta calibration for sparse probability ranges."""
+
+    def __init__(self, eps: float = _CALIBRATION_EPS) -> None:
+        self.eps = eps
+        self.model = LogisticRegression(C=1e6, max_iter=1000)
+
+    def _features(self, p: np.ndarray) -> np.ndarray:
+        p = np.clip(np.asarray(p, dtype=float), self.eps, 1.0 - self.eps)
+        return np.column_stack((np.log(p), np.log1p(-p)))
+
+    def fit(self, p: np.ndarray, y: np.ndarray) -> "BetaCalibrator":
+        self.model.fit(self._features(p), np.asarray(y, dtype=int))
+        return self
+
+    def predict(self, p: np.ndarray) -> np.ndarray:
+        calibrated = self.model.predict_proba(self._features(p))[:, 1]
+        return np.clip(calibrated, self.eps, 1.0 - self.eps)
 
 
 def feature_columns(df: pl.DataFrame) -> list[str]:
@@ -71,14 +95,36 @@ def predict_exceedance(models, df: pl.DataFrame, feats: list[str]) -> dict[float
     return {thr: m.predict_proba(X)[:, 1] for thr, m in models.items()}
 
 
-def fit_calibration(models, calib: pl.DataFrame, feats: list[str]) -> dict[float, IsotonicRegression]:
-    """Isotonic calibration per threshold on a held-out window (our honesty edge)."""
-    cals: dict[float, IsotonicRegression] = {}
+def _enough_calibration_cases(calib: pl.DataFrame, threshold: float) -> bool:
+    """Require independent wet/dry hours, not only repeated forecast rows."""
+    wet = calib.filter(pl.col("p_obs") >= threshold)
+    dry = calib.filter(pl.col("p_obs") < threshold)
+    if "valid_time" in calib.columns:
+        return wet["valid_time"].n_unique() >= 10 and dry["valid_time"].n_unique() >= 10
+    return wet.height >= 20 and dry.height >= 20
+
+
+def fit_calibration(
+    models,
+    calib: pl.DataFrame,
+    feats: list[str],
+    *,
+    method: str = "beta",
+) -> dict[float, BetaCalibrator | IsotonicRegression]:
+    """Fit threshold-wise calibration on a held-out chronological window."""
+    if method not in {"beta", "isotonic"}:
+        raise ValueError(f"Unknown rain calibration method: {method}")
+    cals: dict[float, BetaCalibrator | IsotonicRegression] = {}
     for thr, p in predict_exceedance(models, calib, feats).items():
+        if not _enough_calibration_cases(calib, thr):
+            continue
         y = (calib["p_obs"] >= thr).cast(pl.Int8).to_numpy()
-        iso = IsotonicRegression(out_of_bounds="clip")
-        iso.fit(p, y)
-        cals[thr] = iso
+        calibrator = (
+            BetaCalibrator().fit(p, y)
+            if method == "beta"
+            else IsotonicRegression(out_of_bounds="clip").fit(p, y)
+        )
+        cals[thr] = calibrator
     return cals
 
 
@@ -86,16 +132,29 @@ def apply_calibration(cals, probs: dict[float, np.ndarray]) -> dict[float, np.nd
     return {thr: (cals[thr].predict(p) if thr in cals else p) for thr, p in probs.items()}
 
 
-def train_rain_engine(canonical: pl.DataFrame) -> dict:
-    """Fit the exceedance classifiers on all data. LightGBM's binary probabilities are
-    already well-calibrated here (isotonic on a short recent window only capped them),
-    so no extra calibration step — `cals` is empty and predictions pass through raw."""
-    feats = feature_columns(canonical)
-    models = train_exceedance(canonical, feats)
+def train_rain_engine(
+    canonical: pl.DataFrame, *, cal_window_days: int = 30, calibration: str = "beta"
+) -> dict:
+    """Fit classifiers and calibrators with a leak-free chronological holdout."""
+    if cal_window_days <= 0:
+        raise ValueError("cal_window_days must be positive")
+    latest = canonical["valid_time"].max()
+    calibration_start = latest - timedelta(days=cal_window_days)
+    fit_df = canonical.filter(pl.col("valid_time") < calibration_start)
+    calib_df = canonical.filter(pl.col("valid_time") >= calibration_start)
+    if fit_df.height == 0 or calib_df.height == 0:
+        raise ValueError("Not enough chronological data for rain calibration")
+
+    feats = feature_columns(fit_df)
+    models = train_exceedance(fit_df, feats)
+    cals = fit_calibration(models, calib_df, feats, method=calibration)
     return {
         "features": feats,
         "models": models,
-        "cals": {},
+        "cals": cals,
+        "calibration": calibration,
+        "calibration_start": calibration_start,
+        "fit_through": fit_df["valid_time"].max(),
         "thresholds": sorted(models.keys()),
         "base_rate": float(canonical["rain_occ"].mean()),
         "trained_through": canonical["valid_time"].max(),
@@ -116,5 +175,14 @@ def load_rain_engine(path: Path | str = RAIN_ENGINE_PATH) -> dict:
 def predict_rain(artifact: dict, df: pl.DataFrame) -> dict[float, np.ndarray]:
     """Calibrated exceedance probabilities per threshold for `df` (rain features)."""
     raw = predict_exceedance(artifact["models"], df, artifact["features"])
-    return apply_calibration(artifact["cals"], raw)
+    calibrated = apply_calibration(artifact.get("cals", {}), raw)
+    # Exceedance probabilities must be nested: P(>= 5 mm) cannot exceed P(>= 1 mm).
+    previous = None
+    for threshold in sorted(calibrated):
+        p = np.clip(calibrated[threshold], 0.0, 1.0)
+        if previous is not None:
+            p = np.minimum(p, previous)
+        calibrated[threshold] = p
+        previous = p
+    return calibrated
 

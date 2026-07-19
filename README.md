@@ -18,26 +18,14 @@ The project currently has three user-facing pieces:
   postprocessor against baselines such as persistence, climatology, and the best raw
   model across 24-168 hour lead times.
 - **Rain odds**: a separate trained rain model estimates the probability of measurable
-  precipitation at the station, with a live probability-of-precipitation fallback/floor
-  for drizzle and very near-term rain display.
+  station precipitation and calibrates it on a chronologically held-out recent window.
 
-That last point matters: the displayed website rain percentage is currently **not purely
-the locally trained rain model**. The trained model predicts station precipitation
-exceedance, especially `P(precipitation >= 0.1 mm/h)`. In near-term drizzle cases, the
-raw model amount fields can be `0.0 mm/h` even while upstream PoP and the real sky say
-"rain possible/ongoing". To avoid showing absurdly low odds in that situation, the site
-currently displays:
-
-```text
-displayed rain odds = max(
-  trained local rain model P(precipitation >= 0.1 mm/h),
-  live upstream mean precipitation_probability
-)
-```
-
-So temperature is the clean fine-tuned Lüneburg model. Rain is a trained local model plus
-a pragmatic live PoP floor. The next scientific improvement is to train/calibrate that
-PoP signal locally instead of using a simple floor.
+The displayed percentage is the locally trained and calibrated
+`P(precipitation >= 0.1 mm/h)`. Live Open-Meteo precipitation probability is retained in
+the API as a diagnostic field, but it does not override the local model. The compact hourly
+cards show only `P(precipitation >= 0.1 mm/h)`. Expanding a card reveals the 1 mm and 5 mm
+thresholds, the raw amount mean with an explicit caveat, the local temperature interval,
+and the individual input-model temperatures.
 
 ## Setup
 
@@ -65,6 +53,7 @@ wetter build-hourly    # curated hourly temperature dataset
 wetter train-hourly    # tuned hourly temperature engine -> data/models/engine_hourly.joblib
 wetter build-rain      # curated rain dataset
 wetter train-rain      # trained rain engine -> data/models/rain_engine.joblib
+wetter evaluate-rain   # leak-free raw/isotonic/beta probability comparison
 wetter serve           # FastAPI website at http://127.0.0.1:8000
 ```
 
@@ -122,16 +111,21 @@ Its features are intentionally physical rather than calendar-memorized:
 - mean cloud cover and relative humidity;
 - observed precipitation at issue time as a persistence signal.
 
-The live website additionally fetches Open-Meteo `precipitation_probability`. Because
-that field is not consistently available in the historical single-runs archive used for
-training, it is currently used only at serving time as the display floor described above.
+The classifiers are trained before a recent chronological calibration window. Smooth beta
+calibration is the production default; isotonic and raw probabilities remain available in
+`wetter evaluate-rain` for reproducible comparison. Thresholds with too few independent
+wet hours are deliberately left uncalibrated instead of fitting an unstable correction.
+
+The live website additionally fetches Open-Meteo `precipitation_probability`. Because that
+field is not consistently available in the historical single-runs archive, it is exposed
+only as `rain_upstream_p` for diagnostics and is not blended into the displayed value.
 
 ## Known Limitations
 
-- Rain odds on the site are a hybrid display value, not yet a fully locally calibrated
-  PoP model.
-- The trained rain target is measurable station accumulation (`>= 0.1 mm/h`), while many
-  consumer weather apps show "chance of any precipitation", including trace drizzle.
+- The available honest single-run rain history currently covers less than a full annual
+  cycle, so seasonal calibration should be monitored as more forecasts accumulate.
+- Open-Meteo PoP cannot be learned as a blend feature until issue-time values and later
+  station outcomes have been collected for a sufficiently long period.
 - Bright Sky current-weather precipitation can be missing, so the app separately queries
   recent `/weather` observations and falls back gracefully when the station has no usable
   current precipitation value.

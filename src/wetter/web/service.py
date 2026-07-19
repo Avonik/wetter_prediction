@@ -175,16 +175,11 @@ def _rain_category(p: float | None, p1: float | None) -> str:
     return "evtl. Schauer"
 
 
-def _blend_live_pop(model_p: float, pop_percent: float | None) -> float:
-    """Use upstream live PoP as a floor for the displayed chance of any rain.
-
-    The trained rain model predicts observed hourly precipitation >= 0.1 mm. That is
-    good for measurable rain, but it under-reads trace drizzle in the first hours when
-    NWP amount fields are 0.0 while probability-of-precipitation is still elevated.
-    """
+def _upstream_probability(pop_percent: float | None) -> float | None:
+    """Normalize upstream PoP for diagnostics; it must not override our calibrated model."""
     if pop_percent is None:
-        return model_p
-    return max(model_p, min(max(float(pop_percent) / 100.0, 0.0), 1.0))
+        return None
+    return min(max(float(pop_percent) / 100.0, 0.0), 1.0)
 
 
 def _rain_bundle(
@@ -204,14 +199,23 @@ def _rain_bundle(
         issue, live_fc_long, list(range(1, 169)), current_precip
     )
     probs = rain_model.predict_rain(art, rows)
-    p01, p1 = probs.get(0.1), probs.get(1.0)
+    p01, p1, p5 = probs.get(0.1), probs.get(1.0), probs.get(5.0)
     if p01 is None:
         return rain_hourly, daily_chance
     for i, row in enumerate(rows.iter_rows(named=True)):
         vt = row["valid_time"]
-        p = _blend_live_pop(float(p01[i]), row.get("pop_mean"))
+        p = float(p01[i])
         pm = float(p1[i]) if p1 is not None else None
-        rain_hourly[vt.isoformat()] = {"p": round(p, 2), "cat": _rain_category(p, pm)}
+        ph = float(p5[i]) if p5 is not None else None
+        amount = row.get("precip_mean")
+        rain_hourly[vt.isoformat()] = {
+            "p": round(p, 2),
+            "p_1mm": round(pm, 2) if pm is not None else None,
+            "p_5mm": round(ph, 2) if ph is not None else None,
+            "amount_mm": round(max(float(amount), 0.0), 2) if amount is not None else None,
+            "upstream_p": _upstream_probability(row.get("pop_mean")),
+            "cat": _rain_category(p, pm),
+        }
         d = vt.astimezone(_TZ).strftime("%d.%m.")
         daily_chance[d] = max(daily_chance.get(d, 0.0), p)
     return rain_hourly, daily_chance
@@ -314,7 +318,11 @@ def assemble(current: dict, live_fc_long: pl.DataFrame, hourly_art: dict) -> dic
     for h in hourly:
         r = rain_hourly.get(h["t"])
         h["rain_p"] = r["p"] if r else None
+        h["rain_p_1mm"] = r["p_1mm"] if r else None
+        h["rain_p_5mm"] = r["p_5mm"] if r else None
         h["rain_cat"] = r["cat"] if r else None
+        h["rain_mm"] = r["amount_mm"] if r else None
+        h["rain_upstream_p"] = r["upstream_p"] if r else None
     for d in daily:
         d["rain_p"] = daily_chance.get(d["date"])
 

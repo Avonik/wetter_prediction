@@ -24,9 +24,9 @@ app = FastAPI(title="Lüneburg Weather Engine", lifespan=lifespan)
 
 
 @app.get("/api/forecast")
-def api_forecast():
+def api_forecast(force: bool = False):
     try:
-        return JSONResponse(service.bundle(), headers={"Cache-Control": "no-cache"})
+        return JSONResponse(service.bundle(force=force), headers={"Cache-Control": "no-cache"})
     except FileNotFoundError:
         return JSONResponse(
             {

@@ -114,20 +114,40 @@ a:hover { text-decoration: underline; }
 
 /* hourly strip (our model, at a glance) */
 .hourstrip {
-  display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+  display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; padding-bottom: 6px;
   scrollbar-width: none;       /* Firefox */
   -ms-overflow-style: none;    /* old Edge/IE */
 }
 .hourstrip::-webkit-scrollbar { display: none; }  /* Chrome / Safari / Edge */
 .hourcard {
-  flex: 0 0 auto; min-width: 66px; text-align: center;
+  flex: 0 0 82px; width: 82px; min-width: 82px; text-align: center;
   background: var(--card-strong); border: 1px solid var(--stroke);
-  border-radius: 14px; padding: 12px 10px;
+  border-radius: 14px; overflow: hidden; transition: min-width 160ms ease;
 }
+.hour-summary { cursor: pointer; list-style: none; padding: 12px 10px 8px; }
+.hour-summary::-webkit-details-marker { display: none; }
 .hourcard .hr { font-size: 0.74rem; color: var(--muted); }
 .hourcard .ht { font-size: 1.3rem; font-weight: 800; margin: 6px 0 2px; color: var(--accent); }
 .hourcard .hrange { font-size: 0.66rem; color: var(--muted); }
 .hourcard .hrain { font-size: 0.68rem; color: #7fc0ff; margin-top: 4px; min-height: 0.9em; }
+.hour-detail-hint { margin-top: 7px; color: var(--muted); font-size: 0.58rem; }
+.hourcard[open] { flex-basis: 280px; width: 280px; min-width: 280px; text-align: left; }
+.hourcard[open] .hour-summary { text-align: center; border-bottom: 1px solid var(--stroke); }
+.hourcard[open] .hour-detail-hint { color: #dce6fb; }
+.hour-details { padding: 10px 12px 13px; }
+.hour-detail-title {
+  margin: 3px 0 7px; color: #fff; font-size: 0.72rem; font-weight: 800;
+  letter-spacing: 0.03em; text-transform: uppercase;
+}
+.hour-detail-title:not(:first-child) { margin-top: 14px; }
+.hour-detail-subtitle { margin: 9px 0 4px; color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.hour-detail-row {
+  display: flex; justify-content: space-between; gap: 14px; padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.045); font-size: 0.68rem;
+}
+.hour-detail-label { color: var(--muted); }
+.hour-detail-value { color: #fff; font-weight: 650; white-space: nowrap; }
+.hour-detail-note { margin-top: 5px; color: var(--muted); font-size: 0.59rem; line-height: 1.35; }
 .day .drain { font-size: 0.78rem; color: #7fc0ff; margin-top: 4px; min-height: 1em; }
 
 /* note + footer + states */

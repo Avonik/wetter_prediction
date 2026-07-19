@@ -16,7 +16,7 @@ from wetter import config
 from wetter.data import (
     build_dataset, climatology, forecasts, live, observations, rain_dataset, single_runs,
 )
-from wetter.eval import report
+from wetter.eval import rain_report, report
 from wetter.models import engine, rain
 
 app = typer.Typer(help="Lüneburg temperature postprocessing engine")
@@ -69,14 +69,31 @@ def build_rain_cmd(force_obs: bool = False) -> None:
 
 
 @app.command("train-rain")
-def train_rain_cmd() -> None:
+def train_rain_cmd(cal_window_days: int = 30, calibration: str = "beta") -> None:
     import polars as pl
 
     canon = pl.read_parquet(config.CURATED_DIR / "canonical_rain.parquet")
-    art = rain.train_rain_engine(canon)
+    art = rain.train_rain_engine(
+        canon, cal_window_days=cal_window_days, calibration=calibration
+    )
     path = rain.save_rain_engine(art)
     typer.echo(f"trained rain engine -> {path}")
-    typer.echo(f"thresholds {art['thresholds']} | base rate {art['base_rate']:.3f}")
+    typer.echo(
+        f"thresholds {art['thresholds']} | base rate {art['base_rate']:.3f} | "
+        f"calibrated {sorted(art['cals'])} via {art['calibration']}"
+    )
+
+
+@app.command("evaluate-rain")
+def evaluate_rain_cmd(
+    train_end: str = "2026-04-01", cal_end: str = "2026-05-01"
+) -> None:
+    """Leak-free comparison of raw, isotonic, and beta rain probabilities."""
+    import polars as pl
+
+    canon = pl.read_parquet(config.CURATED_DIR / "canonical_rain.parquet")
+    result = rain_report.evaluate_options(canon, train_end=train_end, cal_end=cal_end)
+    typer.echo(rain_report.format_options(result))
 
 
 @app.command("train-hourly")

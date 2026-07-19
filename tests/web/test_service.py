@@ -135,10 +135,39 @@ def test_fetch_alerts_tolerates_failure(monkeypatch):
     assert service.fetch_alerts() == []  # never breaks the page
 
 
-def test_blend_live_pop_uses_probability_floor():
-    assert service._blend_live_pop(0.02, 30.0) == 0.3
-    assert service._blend_live_pop(0.45, 30.0) == 0.45
-    assert service._blend_live_pop(0.2, None) == 0.2
+def test_upstream_pop_is_diagnostic_only():
+    assert service._upstream_probability(30.0) == 0.3
+    assert service._upstream_probability(140.0) == 1.0
+    assert service._upstream_probability(-20.0) == 0.0
+    assert service._upstream_probability(None) is None
+
+
+def test_rain_bundle_does_not_let_upstream_pop_override_local_model(monkeypatch):
+    issue = datetime(2026, 7, 19, 13, tzinfo=timezone.utc)
+    valid = issue + timedelta(hours=1)
+    rows = pl.DataFrame(
+        {
+            "valid_time": [valid],
+            "pop_mean": [93.5],
+            "precip_mean": [0.18],
+        }
+    ).with_columns(pl.col("valid_time").cast(pl.Datetime("us", "UTC")))
+    monkeypatch.setattr(service.rain_model, "load_rain_engine", lambda: {})
+    monkeypatch.setattr(service.rain_dataset, "build_live_rain_rows", lambda *args: rows)
+    monkeypatch.setattr(
+        service.rain_model,
+        "predict_rain",
+        lambda artifact, frame: {0.1: [0.14], 1.0: [0.02], 5.0: [0.0]},
+    )
+
+    hourly, _ = service._rain_bundle(issue, pl.DataFrame(), 0.0)
+
+    result = hourly[valid.isoformat()]
+    assert result["p"] == 0.14
+    assert result["p_1mm"] == 0.02
+    assert result["p_5mm"] == 0.0
+    assert result["upstream_p"] == 0.935
+    assert result["amount_mm"] == 0.18
 
 
 def test_models_hourly_window_and_labels():

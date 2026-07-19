@@ -1,5 +1,7 @@
 import numpy as np
 import polars as pl
+import pytest
+from datetime import datetime, timedelta, timezone
 from sklearn.metrics import roc_auc_score
 from wetter.models import rain
 
@@ -41,3 +43,48 @@ def test_calibration_returns_valid_probs():
     cals = rain.fit_calibration(models, ca, feats)
     cal = rain.apply_calibration(cals, rain.predict_exceedance(models, te, feats))
     assert cal[0.1].min() >= 0.0 and cal[0.1].max() <= 1.0
+
+
+def test_beta_calibration_rejects_unknown_method():
+    df = _synth()
+    feats = rain.feature_columns(df)
+    models = rain.train_exceedance(df.head(2000), feats)
+    with pytest.raises(ValueError, match="Unknown rain calibration method"):
+        rain.fit_calibration(models, df.tail(1000), feats, method="magic")
+
+
+def test_train_rain_engine_uses_chronological_calibration_window():
+    df = _synth(4000).with_columns(
+        pl.datetime_range(
+            datetime(2025, 1, 1, tzinfo=timezone.utc),
+            datetime(2025, 1, 1, tzinfo=timezone.utc) + timedelta(hours=3999),
+            interval="1h",
+            eager=True,
+        ).alias("valid_time"),
+        (pl.col("p_obs") >= 0.1).cast(pl.Int8).alias("rain_occ"),
+    )
+
+    artifact = rain.train_rain_engine(df, cal_window_days=30)
+
+    assert artifact["calibration"] == "beta"
+    assert 0.1 in artifact["cals"]
+    assert artifact["fit_through"] < artifact["calibration_start"]
+    assert artifact["trained_through"] == df["valid_time"].max()
+
+
+def test_predict_rain_enforces_nested_thresholds(monkeypatch):
+    monkeypatch.setattr(
+        rain,
+        "predict_exceedance",
+        lambda models, df, feats: {
+            0.1: np.array([0.4]),
+            1.0: np.array([0.6]),
+            5.0: np.array([0.5]),
+        },
+    )
+    probabilities = rain.predict_rain(
+        {"models": {}, "features": [], "cals": {}}, pl.DataFrame()
+    )
+    assert probabilities[0.1][0] == 0.4
+    assert probabilities[1.0][0] == 0.4
+    assert probabilities[5.0][0] == 0.4

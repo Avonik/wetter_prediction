@@ -7,7 +7,9 @@ client = TestClient(webapp.app)
 
 def test_api_forecast_returns_bundle(monkeypatch):
     monkeypatch.setattr(
-        service, "bundle", lambda: {"place": "Lüneburg", "hourly": [], "daily": []}
+        service,
+        "bundle",
+        lambda force=False: {"place": "Lüneburg", "hourly": [], "daily": []},
     )
     r = client.get("/api/forecast")
     assert r.status_code == 200
@@ -16,7 +18,7 @@ def test_api_forecast_returns_bundle(monkeypatch):
 
 
 def test_api_forecast_handles_missing_engine(monkeypatch):
-    def boom():
+    def boom(force=False):
         raise FileNotFoundError("no engine")
 
     monkeypatch.setattr(service, "bundle", boom)
@@ -26,7 +28,7 @@ def test_api_forecast_handles_missing_engine(monkeypatch):
 
 
 def test_api_forecast_does_not_expose_internal_error(monkeypatch):
-    def boom():
+    def boom(force=False):
         raise RuntimeError("secret upstream details")
 
     monkeypatch.setattr(service, "bundle", boom)
@@ -61,3 +63,15 @@ def test_index_page_served():
     r = client.get("/")
     assert r.status_code == 200
     assert "Lüneburg" in r.text
+
+
+def test_api_forecast_passes_force_refresh(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        service,
+        "bundle",
+        lambda force=False: seen.append(force) or {"place": "Lüneburg"},
+    )
+
+    assert client.get("/api/forecast?force=true").status_code == 200
+    assert seen == [True]

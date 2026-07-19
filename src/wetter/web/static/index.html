@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=resilient-snapshot-1" />
+  <link rel="stylesheet" href="/static/styles.css?v=rain-details-2" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -72,7 +72,7 @@
       <section class="card">
         <div class="card-head">
           <h2 data-i18n="hoursTitle">Nächste Stunden</h2>
-          <p class="muted small" data-i18n="hoursSubtitle">Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.</p>
+          <p class="muted small" data-i18n="hoursSubtitle">Chance für mindestens 0,1 mm · Stunde antippen für Details.</p>
         </div>
         <div id="hourstrip" class="hourstrip"></div>
       </section>
@@ -90,7 +90,7 @@
       <section class="card">
         <div class="card-head">
           <h2 data-i18n="dailyTitle">7-Tage-Vorhersage</h2>
-          <p class="muted small" data-i18n="dailySubtitle">Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).</p>
+          <p class="muted small" data-i18n="dailySubtitle">Tageshöchst- und Tiefstwerte · Regenwert = höchste stündliche Chance.</p>
         </div>
         <div id="daily" class="daily"></div>
       </section>
@@ -99,8 +99,10 @@
         <strong>Wie diese Vorhersage entsteht.</strong> Sie kombiniert mehrere Profi-Wettermodelle
         (ICON-D2, ICON-EU, ECMWF, GFS), korrigiert deren lokale Fehler für die Station Wendisch Evern
         und bezieht die aktuelle Messung mit ein. Ergebnis: Temperatur mit Unsicherheitsband und
-        eine <em>kalibrierte</em> Regenwahrscheinlichkeit — sagt sie 30 %, regnet es über viele Tage
-        auch etwa in 30 % der Fälle. Die Genauigkeit ist gegen die tatsächlich gemessenen Werte
+        eine chronologisch <em>kalibrierte</em> Chance für mindestens 0,1 mm pro Stunde — sagt sie
+        30 %, regnet es in etwa 30 % vergleichbarer Stunden. Die ausklappbaren Stundenkarten zeigen
+        zusätzlich stärkere Regenschwellen und die einzelnen Temperaturmodelle. Die Genauigkeit ist
+        gegen die tatsächlich gemessenen Werte
         geprüft (Backtest). Kein offizielles Wetterprodukt.
       </section>
     </main>
@@ -125,6 +127,6 @@
       </a>
     </footer>
   </div>
-  <script src="/static/app.js?v=resilient-snapshot-1" defer></script>
+  <script src="/static/app.js?v=rain-details-2" defer></script>
 </body>
 </html>

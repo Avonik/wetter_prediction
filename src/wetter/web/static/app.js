@@ -10,18 +10,20 @@ const I18N = {
     humidity: "Feuchte",
     cloudCover: "Bewölkung",
     hoursTitle: "Nächste Stunden",
-    hoursSubtitle: "Temperatur + kalibrierte Regenwahrscheinlichkeit, Stunde für Stunde.",
+    hoursSubtitle: "Chance für mindestens 0,1 mm · Stunde antippen für Details.",
     chartTitle: "48-Stunden-Verlauf & Modellvergleich",
     chartSubtitle:
       '<b style="color:#ffd166">Unser Modell</b> (dicke Linie + 80 %-Band) gegen die großen Wettermodelle (gestrichelt).',
     dailyTitle: "7-Tage-Vorhersage",
-    dailySubtitle: "Tageshöchst- und Tiefstwerte · unser feingetuntes Modell (deutsche Zeit).",
+    dailySubtitle: "Tageshöchst- und Tiefstwerte · Regenwert = höchste stündliche Chance.",
     note:
       "<strong>Wie diese Vorhersage entsteht.</strong> Sie kombiniert mehrere Profi-Wettermodelle " +
       "(ICON-D2, ICON-EU, ECMWF, GFS), korrigiert deren lokale Fehler für die Station Wendisch Evern " +
       "und bezieht die aktuelle Messung mit ein. Ergebnis: Temperatur mit Unsicherheitsband und " +
-      "eine <em>kalibrierte</em> Regenwahrscheinlichkeit — sagt sie 30 %, regnet es über viele Tage " +
-      "auch etwa in 30 % der Fälle. Die Genauigkeit ist gegen die tatsächlich gemessenen Werte " +
+      "eine chronologisch <em>kalibrierte</em> Chance für mindestens 0,1 mm pro Stunde — sagt sie " +
+      "30 %, regnet es in etwa 30 % vergleichbarer Stunden. Die ausklappbaren Stundenkarten zeigen " +
+      "zusätzlich stärkere Regenschwellen und die einzelnen Temperaturmodelle. Die Genauigkeit ist " +
+      "gegen die tatsächlich gemessenen Werte " +
       "geprüft (Backtest). Kein offizielles Wetterprodukt.",
     loading: "Lade aktuelle Vorhersage…",
     footerData:
@@ -51,6 +53,18 @@ const I18N = {
       `Stationsdaten vom ${observedAt} verwendet. Das liegt an der Datenbereitstellung der Wetterstation.`,
     bandLabel: "80 %-Band",
     ourModelLabel: "Unser Modell",
+    details: "Details",
+    rainDetails: "Regenwahrscheinlichkeit",
+    temperatureDetails: "Temperaturdetails",
+    rainAtLeast01: "mindestens 0,1 mm",
+    rainAtLeast1: "mindestens 1 mm",
+    rainAtLeast5: "mindestens 5 mm",
+    rawRainAmount: "Rohes Mengenmittel",
+    rawRainAmountNote: "Keine Menge unter der Bedingung, dass es regnet.",
+    localTemperature: "Unsere Prognose",
+    temperatureRange: "80 %-Bereich",
+    inputModels: "Eingangsmodelle",
+    notReliable: "noch nicht belastbar",
     conditions: {
       clear: "klar",
       cloudy: "bewölkt",
@@ -73,17 +87,19 @@ const I18N = {
     humidity: "Humidity",
     cloudCover: "Clouds",
     hoursTitle: "Next Hours",
-    hoursSubtitle: "Temperature + calibrated rain probability, hour by hour.",
+    hoursSubtitle: "Chance of at least 0.1 mm · tap an hour for details.",
     chartTitle: "48-Hour Trend & Model Comparison",
     chartSubtitle:
       '<b style="color:#ffd166">Our model</b> (thick line + 80% band) against the major weather models (dashed).',
     dailyTitle: "7-Day Forecast",
-    dailySubtitle: "Daily highs and lows · our locally tuned model (German time).",
+    dailySubtitle: "Daily highs and lows · rain value = highest hourly probability.",
     note:
       "<strong>How this forecast is made.</strong> It combines several professional weather models " +
       "(ICON-D2, ICON-EU, ECMWF, GFS), corrects their local bias for the Wendisch Evern station, " +
       "and includes the latest observation. The result: temperature with an uncertainty band and " +
-      "a <em>calibrated</em> rain probability — when it says 30%, rain occurs on roughly 30% of similar days. " +
+      "a chronologically <em>calibrated</em> chance of at least 0.1 mm per hour — when it says 30%, " +
+      "rain occurs in roughly 30% of similar hours. Expandable hour cards also show stronger rain " +
+      "thresholds and the individual temperature models. " +
       "Accuracy is checked against the values actually measured in a backtest. Not an official weather product.",
     loading: "Loading current forecast…",
     footerData:
@@ -113,6 +129,18 @@ const I18N = {
       `from ${observedAt} is being used instead. This is caused by the station's data availability.`,
     bandLabel: "80% band",
     ourModelLabel: "Our model",
+    details: "Details",
+    rainDetails: "Rain probability",
+    temperatureDetails: "Temperature details",
+    rainAtLeast01: "at least 0.1 mm",
+    rainAtLeast1: "at least 1 mm",
+    rainAtLeast5: "at least 5 mm",
+    rawRainAmount: "Raw amount mean",
+    rawRainAmountNote: "Not the amount conditional on rain occurring.",
+    localTemperature: "Our forecast",
+    temperatureRange: "80% range",
+    inputModels: "Input models",
+    notReliable: "not yet reliable",
     conditions: {
       clear: "clear",
       cloudy: "cloudy",
@@ -271,7 +299,7 @@ function render(d) {
   renderForecastStatus(d.forecast_status);
   renderDataNotice(d.data_notice);
   renderWarnings(d.alerts);
-  renderHourStrip(d.hourly);
+  renderHourStrip(d.hourly, d.models_hourly);
   renderChart(d);
   renderDaily(d.daily);
 }
@@ -356,7 +384,26 @@ function renderWarnings(alerts) {
   }
 }
 
-function renderHourStrip(hourly) {
+function detailRow(label, value) {
+  const row = makeDiv("hour-detail-row", "");
+  row.append(makeDiv("hour-detail-label", label), makeDiv("hour-detail-value", value));
+  return row;
+}
+
+function probabilityLabel(value) {
+  return value == null ? tr().notReliable : Math.round(value * 100) + "%";
+}
+
+function temperaturesAt(modelsHourly, timestamp) {
+  const values = [];
+  for (const [name, series] of Object.entries(modelsHourly || {})) {
+    const match = series.find((item) => item.t === timestamp);
+    if (match?.v != null) values.push([name, Number(match.v).toFixed(1) + "°C"]);
+  }
+  return values;
+}
+
+function renderHourStrip(hourly, modelsHourly) {
   const el = $("hourstrip");
   el.replaceChildren();
   for (const h of hourly.slice(0, 12)) {
@@ -365,15 +412,47 @@ function renderHourStrip(hourly) {
       minute: "2-digit",
       timeZone: "Europe/Berlin",
     });
-    const card = document.createElement("div");
+    const card = document.createElement("details");
     card.className = "hourcard";
-    const rain = h.rain_p != null ? "💧 " + Math.round(h.rain_p * 100) + "%" : "";
-    card.append(
+    card.name = "hour-details";
+
+    const summary = document.createElement("summary");
+    summary.className = "hour-summary";
+    const rain = h.rain_p != null ? "💧 " + probabilityLabel(h.rain_p) : "";
+    summary.append(
       makeDiv("hr", hr),
       makeDiv("ht", `${Math.round(h.point)}°`),
       makeDiv("hrange", `${Math.round(h.lo)}–${Math.round(h.hi)}°`),
-      makeDiv("hrain", rain)
+      makeDiv("hrain", rain),
+      makeDiv("hour-detail-hint", `⌄ ${tr().details}`)
     );
+
+    const detail = makeDiv("hour-details", "");
+    detail.append(makeDiv("hour-detail-title", tr().rainDetails));
+    detail.append(
+      detailRow(tr().rainAtLeast01, probabilityLabel(h.rain_p)),
+      detailRow(tr().rainAtLeast1, probabilityLabel(h.rain_p_1mm)),
+      detailRow(tr().rainAtLeast5, probabilityLabel(h.rain_p_5mm))
+    );
+    if (h.rain_mm != null) {
+      detail.append(
+        detailRow(tr().rawRainAmount, Number(h.rain_mm).toFixed(2) + " mm"),
+        makeDiv("hour-detail-note", tr().rawRainAmountNote)
+      );
+    }
+
+    detail.append(makeDiv("hour-detail-title", tr().temperatureDetails));
+    detail.append(
+      detailRow(tr().localTemperature, Number(h.point).toFixed(1) + "°C"),
+      detailRow(tr().temperatureRange, `${Number(h.lo).toFixed(1)}–${Number(h.hi).toFixed(1)}°C`)
+    );
+    const modelTemperatures = temperaturesAt(modelsHourly, h.t);
+    if (modelTemperatures.length) {
+      detail.append(makeDiv("hour-detail-subtitle", tr().inputModels));
+      for (const [name, value] of modelTemperatures) detail.append(detailRow(name, value));
+    }
+
+    card.append(summary, detail);
     el.appendChild(card);
   }
 }
